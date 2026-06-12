@@ -16,6 +16,17 @@ UPSTOX_TOKEN_URL = "https://api.upstox.com/v2/login/authorization/token"
 UPSTOX_PROFILE_URL = "https://api.upstox.com/v2/user/profile"
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """SQLite returns naive datetimes; treat them as UTC for comparisons."""
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 class UpstoxAuthService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -56,7 +67,7 @@ class UpstoxAuthService:
             access_token = token_data["access_token"]
             profile = await self._fetch_profile(client, access_token)
 
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+        expires_at = _utc_now() + timedelta(hours=24)
 
         # Upsert: keep only the latest token
         result = await self.db.execute(select(AuthToken).limit(1))
@@ -101,7 +112,7 @@ class UpstoxAuthService:
         token = await self.get_token()
         if not token:
             return False
-        if token.expires_at and token.expires_at < datetime.now(timezone.utc):
+        if token.expires_at and _as_utc(token.expires_at) < _utc_now():
             return False
         return True
 

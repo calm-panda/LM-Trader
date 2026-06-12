@@ -1,4 +1,5 @@
 .env
+certs/
 *.db
 __pycache__/
 *.py[cod]
