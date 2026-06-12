@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Settings</h1>
+
+<form>
+  <fieldset>
+    <legend>Risk Parameters</legend>
+    <label>
+      Max capital per trade (%)
+      <input type="number" value="{{ max_capital_per_trade_pct }}" readonly>
+    </label>
+    <label>
+      Max open positions
+      <input type="number" value="{{ max_open_positions }}" readonly>
+    </label>
+    <label>
+      Daily loss limit (%)
+      <input type="number" value="{{ daily_loss_limit_pct }}" readonly>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Paper Trading</legend>
+    <label>
+      Starting capital (₹)
+      <input type="number" value="{{ paper_starting_capital }}" readonly>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Live Trading</legend>
+    <p>
+      Status:
+      {% if live_trading_enabled %}
+      <span class="badge danger">ENABLED — requires server restart to disable</span>
+      {% else %}
+      <span class="badge">Disabled (paper mode)</span>
+      {% endif %}
+    </p>
+    <p><small>Enable live trading by setting <code>LIVE_TRADING_ENABLED=true</code> in <code>.env</code> and restarting.</small></p>
+  </fieldset>
+</form>
+{% endblock %}

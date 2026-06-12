@@ -1,0 +1,20 @@
+# Core dependencies (Python 3.9+)
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+jinja2>=3.1.4
+python-multipart>=0.0.12
+upstox-python-sdk>=2.0.0
+pandas>=2.2.0
+numpy>=1.26.0
+sqlalchemy[asyncio]>=2.0.36
+aiosqlite>=0.20.0
+apscheduler>=3.10.4
+openai>=1.55.0
+httpx>=0.27.0
+websockets>=13.0
+python-dotenv>=1.0.1
+pydantic-settings>=2.6.0
+itsdangerous>=2.2.0
+
+# Pi / Python 3.11+ extras — install with: pip install -r requirements-pi.txt
+# pandas-ta, backtesting

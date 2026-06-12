@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>{{ symbol }}</h1>
+<p>Candlestick chart with indicator overlays — coming in chart-ui task.</p>
+<div id="chart-container" style="height: 500px; background: var(--pico-card-background-color); border-radius: 8px;">
+  <p style="padding: 2rem; text-align: center; opacity: 0.6;">Chart will render here</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+{% endblock %}

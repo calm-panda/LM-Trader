@@ -1,0 +1,3 @@
+-r requirements.txt
+pandas-ta
+backtesting>=0.3.3

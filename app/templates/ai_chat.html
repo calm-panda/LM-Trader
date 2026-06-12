@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>AI Chat</h1>
+<p>Ask DeepSeek about markets, strategies, and risk.</p>
+<form>
+  <label>
+    Message
+    <textarea name="message" placeholder="Analyze RELIANCE on 5m timeframe..." rows="4" disabled></textarea>
+  </label>
+  <button type="submit" disabled>Send</button>
+</form>
+{% endblock %}

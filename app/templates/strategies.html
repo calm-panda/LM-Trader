@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Strategies</h1>
+<p>Configure and enable automated trading strategies.</p>
+
+{% if strategies %}
+<table>
+  <thead>
+    <tr><th>Name</th><th>Symbols</th><th>Timeframe</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    {% for s in strategies %}
+    <tr>
+      <td>{{ s.name }}</td>
+      <td>{{ s.symbols }}</td>
+      <td>{{ s.timeframe }}</td>
+      <td>{% if s.enabled %}Enabled{% else %}Disabled{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p><em>No strategies configured yet.</em></p>
+{% endif %}
+{% endblock %}

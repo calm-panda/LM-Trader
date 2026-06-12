@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Backtest</h1>
+<p>Run historical strategy validation before enabling paper or live trading.</p>
+<form>
+  <label>
+    Strategy
+    <select name="strategy" disabled>
+      <option>No strategies yet</option>
+    </select>
+  </label>
+  <label>
+    Symbol
+    <input type="text" name="symbol" placeholder="RELIANCE" disabled>
+  </label>
+  <button type="submit" disabled>Run Backtest</button>
+</form>
+{% endblock %}

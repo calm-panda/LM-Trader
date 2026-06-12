@@ -1,0 +1,16 @@
+.env
+*.db
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.venv/
+trading-env/
+data/
+*.egg-info/
+dist/
+build/
+.DS_Store
+.idea/
+.vscode/

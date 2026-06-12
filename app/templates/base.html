@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{{ title | default("LM Trader") }}{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+  <link rel="stylesheet" href="/static/css/app.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <nav class="container-fluid">
+    <ul>
+      <li><strong><a href="/dashboard">LM Trader</a></strong></li>
+    </ul>
+    <ul>
+      <li><a href="/dashboard">Dashboard</a></li>
+      <li><a href="/chart/RELIANCE">Charts</a></li>
+      <li><a href="/strategies">Strategies</a></li>
+      <li><a href="/backtest">Backtest</a></li>
+      <li><a href="/portfolio">Portfolio</a></li>
+      <li><a href="/ai/chat">AI</a></li>
+      <li><a href="/settings">Settings</a></li>
+      <li><a href="/auth/login" role="button" class="outline">Upstox Login</a></li>
+    </ul>
+  </nav>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

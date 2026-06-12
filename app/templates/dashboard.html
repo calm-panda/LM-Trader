@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="grid">
+  <article>
+    <header>Upstox Connection</header>
+    {% if is_authenticated %}
+    <p><span class="badge success">Connected</span></p>
+    {% else %}
+    <p><span class="badge warning">Not connected</span></p>
+    <p><a href="/auth/login" role="button">Connect Upstox</a></p>
+    {% endif %}
+  </article>
+
+  <article>
+    <header>Trading Mode</header>
+    <p>
+      {% if live_trading_enabled %}
+      <span class="badge danger">LIVE</span>
+      {% else %}
+      <span class="badge">Paper</span>
+      {% endif %}
+    </p>
+  </article>
+
+  <article>
+    <header>Today's P&amp;L</header>
+    <p>—</p>
+  </article>
+
+  <article>
+    <header>Active Strategies</header>
+    <p>0 running</p>
+  </article>
+</div>
+
+<section>
+  <h2>Recent Signals</h2>
+  <p><em>No signals yet. Enable a strategy to begin paper trading.</em></p>
+</section>
+{% endblock %}
