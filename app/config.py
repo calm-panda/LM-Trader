@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     max_open_positions: int = 5
     daily_loss_limit_pct: float = 2.0
 
+    # Watchlist — comma-separated NSE trading symbols to track and seed with OHLCV data.
+    # Override in .env: WATCHLIST=RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK
+    watchlist: str = "RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,SBIN,WIPRO,AXISBANK,KOTAKBANK,LT"
+
+    @property
+    def watchlist_symbols(self) -> list[str]:
+        return [s.strip().upper() for s in self.watchlist.split(",") if s.strip()]
+
     @property
     def data_dir(self) -> Path:
         return Path("data")
