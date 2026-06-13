@@ -1,0 +1,22 @@
+<tr id="strat-row-{{ strategy.id }}" class="{% if strategy.enabled %}enabled{% endif %}">
+  <td class="strat-name">{{ strategy.name }}</td>
+  <td><code>{{ strategy.class_name }}</code></td>
+  <td>{{ strategy.symbols }}</td>
+  <td><span class="badge">{{ strategy.timeframe }}</span></td>
+  <td>
+    <button
+      class="toggle-btn {% if strategy.enabled %}on{% else %}off{% endif %}"
+      hx-post="/strategies/{{ strategy.id }}/toggle"
+      hx-target="#strat-row-{{ strategy.id }}"
+      hx-swap="outerHTML"
+    >
+      {% if strategy.enabled %}&#9646;&#9646; Enabled{% else %}&#9654; Disabled{% endif %}
+    </button>
+  </td>
+  <td>
+    <a href="#" class="link-sm"
+       hx-get="/strategies/{{ strategy.id }}/signals"
+       hx-target="#signals-panel"
+       hx-swap="innerHTML">Signals</a>
+  </td>
+</tr>

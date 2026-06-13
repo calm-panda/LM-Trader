@@ -97,11 +97,19 @@ async def lifespan(app: FastAPI):
     import asyncio
     asyncio.create_task(_start_data_pipeline())
 
+    # Strategy scheduler + paper engine initialisation
+    from app.services.paper_engine import paper_engine
+    from app.services.scheduler import start_scheduler
+    await paper_engine.restore_from_db()
+    start_scheduler()
+
     yield
 
-    # Shutdown: stop the WebSocket feed cleanly
+    # Shutdown: stop the WebSocket feed and scheduler cleanly
     from app.services.upstox.feed import stop_feed
+    from app.services.scheduler import stop_scheduler
     stop_feed()
+    stop_scheduler()
 
 
 def create_app() -> FastAPI:

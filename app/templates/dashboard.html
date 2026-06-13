@@ -1,43 +1,161 @@
 {% extends "base.html" %}
 
+{% block head %}
+<style>
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: .75rem;
+    margin-bottom: 1.5rem;
+  }
+  .stat-card {
+    background: var(--card-background-color, #1e2129);
+    border: 1px solid var(--muted-border-color, #333);
+    border-radius: .5rem;
+    padding: .85rem 1rem;
+    text-align: center;
+  }
+  .stat-card .label {
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted-color);
+    margin-bottom: .2rem;
+  }
+  .stat-card .value { font-size: 1.25rem; font-weight: 700; }
+  .up   { color: #26a69a; }
+  .down { color: #ef5350; }
+
+  .badge.success  { background: #26a69a22; color: #26a69a; border: 1px solid #26a69a55; }
+  .badge.warning  { background: #ffa72622; color: #ffa726; border: 1px solid #ffa72655; }
+  .badge.danger   { background: #ef535022; color: #ef5350; border: 1px solid #ef535055; }
+  .badge { display:inline-block; padding:.15em .6em; border-radius:.3rem; font-size:.8rem; font-weight:600; }
+
+  .trades-table { width:100%; border-collapse:collapse; font-size:.88rem; }
+  .trades-table th { padding:.35rem .5rem; border-bottom:1px solid #333; color:var(--muted-color); font-size:.75rem; text-transform:uppercase; }
+  .trades-table td { padding:.4rem .5rem; border-bottom:1px solid #22262e; }
+  .sig-buy  { color:#26a69a; font-weight:700; }
+  .sig-sell { color:#ef5350; font-weight:700; }
+</style>
+{% endblock %}
+
 {% block content %}
 <h1>Dashboard</h1>
 
-<div class="grid">
-  <article>
-    <header>Upstox Connection</header>
-    {% if is_authenticated %}
-    <p><span class="badge success">Connected</span></p>
-    {% else %}
-    <p><span class="badge warning">Not connected</span></p>
-    <p><a href="/auth/login" role="button">Connect Upstox</a></p>
-    {% endif %}
-  </article>
+<!-- ── Status cards ──────────────────────────────────────────────────────── -->
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="label">Upstox</div>
+    <div class="value">
+      {% if is_authenticated %}
+      <span class="badge success">Live</span>
+      {% else %}
+      <span class="badge warning">Login</span>
+      {% endif %}
+    </div>
+  </div>
 
-  <article>
-    <header>Trading Mode</header>
-    <p>
+  <div class="stat-card">
+    <div class="label">Mode</div>
+    <div class="value">
       {% if live_trading_enabled %}
       <span class="badge danger">LIVE</span>
       {% else %}
       <span class="badge">Paper</span>
       {% endif %}
-    </p>
-  </article>
+    </div>
+  </div>
 
-  <article>
-    <header>Today's P&amp;L</header>
-    <p>—</p>
-  </article>
+  <div class="stat-card">
+    <div class="label">Active Strategies</div>
+    <div class="value neu">{{ active_strategies }}</div>
+  </div>
 
-  <article>
-    <header>Active Strategies</header>
-    <p>0 running</p>
-  </article>
+  <div class="stat-card">
+    <div class="label">Portfolio Value</div>
+    <div class="value neu">₹{{ "{:,.0f}".format(snap.total_value) }}</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="label">Day P&amp;L</div>
+    <div class="value {{ 'up' if snap.day_pnl >= 0 else 'down' }}">
+      {{ "{:+,.0f}".format(snap.day_pnl) }}
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="label">Open Positions</div>
+    <div class="value neu">{{ snap.open_positions }}</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="label">Cash</div>
+    <div class="value neu">₹{{ "{:,.0f}".format(snap.cash) }}</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="label">Realised P&amp;L</div>
+    <div class="value {{ 'up' if snap.realised_pnl >= 0 else 'down' }}">
+      {{ "{:+,.0f}".format(snap.realised_pnl) }}
+    </div>
+  </div>
 </div>
 
+<!-- ── Quick actions ─────────────────────────────────────────────────────── -->
+{% if not is_authenticated %}
+<article>
+  <header>Action required</header>
+  <p>You are not connected to Upstox. Live data and trading will not work until you log in.</p>
+  <a href="/auth/login" role="button">Connect Upstox</a>
+</article>
+{% endif %}
+
+<!-- ── Recent trades ─────────────────────────────────────────────────────── -->
 <section>
-  <h2>Recent Signals</h2>
-  <p><em>No signals yet. Enable a strategy to begin paper trading.</em></p>
+  <h2>Recent Signals / Trades</h2>
+  {% if recent_trades %}
+  <table class="trades-table">
+    <thead>
+      <tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Fill ₹</th><th>Notes</th><th>Time</th></tr>
+    </thead>
+    <tbody>
+      {% for t in recent_trades %}
+      <tr>
+        <td><strong>{{ t.symbol }}</strong></td>
+        <td class="{{ 'sig-buy' if t.side == 'BUY' else 'sig-sell' }}">{{ t.side }}</td>
+        <td>{{ t.qty }}</td>
+        <td>₹{{ "{:,.2f}".format(t.fill_price) }}</td>
+        <td style="font-size:.78rem;color:var(--muted-color)">{{ t.notes or "" }}</td>
+        <td style="font-size:.78rem">
+          {% if t.filled_at %}{{ t.filled_at[:19].replace("T"," ") }}{% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p><em style="color:var(--muted-color);">No trades yet. Enable a strategy on the <a href="/strategies">Strategies</a> page to start paper trading.</em></p>
+  {% endif %}
 </section>
+
+<!-- ── Open positions ─────────────────────────────────────────────────────── -->
+{% if snap.positions %}
+<section style="margin-top:1.5rem;">
+  <h2>Open Positions</h2>
+  <table class="trades-table">
+    <thead><tr><th>Symbol</th><th>Qty</th><th>Avg ₹</th><th>LTP ₹</th><th>P&amp;L</th></tr></thead>
+    <tbody>
+      {% for p in snap.positions %}
+      <tr>
+        <td><strong>{{ p.symbol }}</strong></td>
+        <td>{{ p.qty }}</td>
+        <td>{{ "{:,.2f}".format(p.avg_price) }}</td>
+        <td>{{ "{:,.2f}".format(p.ltp) }}</td>
+        <td class="{{ 'up' if p.pnl >= 0 else 'down' }}">{{ "{:+,.2f}".format(p.pnl) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
 {% endblock %}

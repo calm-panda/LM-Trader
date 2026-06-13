@@ -1,26 +1,316 @@
 {% extends "base.html" %}
 
-{% block content %}
-<h1>Strategies</h1>
-<p>Configure and enable automated trading strategies.</p>
+{% block head %}
+<style>
+  /* ── Paper portfolio banner ─────────────────────────── */
+  .paper-banner {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: .75rem;
+    margin-bottom: 1.5rem;
+  }
+  .paper-card {
+    background: var(--card-background-color, #1e2129);
+    border: 1px solid var(--muted-border-color, #333);
+    border-radius: .5rem;
+    padding: .75rem 1rem;
+    text-align: center;
+  }
+  .paper-card .label {
+    font-size: .7rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted-color);
+    margin-bottom: .2rem;
+  }
+  .paper-card .value {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+  .up   { color: #26a69a; }
+  .down { color: #ef5350; }
+  .neu  { color: var(--color); }
 
-{% if strategies %}
-<table>
-  <thead>
-    <tr><th>Name</th><th>Symbols</th><th>Timeframe</th><th>Status</th></tr>
-  </thead>
-  <tbody>
-    {% for s in strategies %}
-    <tr>
-      <td>{{ s.name }}</td>
-      <td>{{ s.symbols }}</td>
-      <td>{{ s.timeframe }}</td>
-      <td>{% if s.enabled %}Enabled{% else %}Disabled{% endif %}</td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p><em>No strategies configured yet.</em></p>
+  /* ── Strategy table ─────────────────────────────────── */
+  .strat-table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+  .strat-table th {
+    text-align: left;
+    padding: .45rem .6rem;
+    border-bottom: 1px solid var(--muted-border-color, #333);
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted-color);
+  }
+  .strat-table td { padding: .5rem .6rem; vertical-align: middle; font-size: .9rem; }
+  .strat-table tr { border-bottom: 1px solid var(--muted-border-color, #22262e); }
+  .strat-table tr.enabled { background: rgba(38,166,154,.07); }
+  .strat-name { font-weight: 600; }
+
+  .badge {
+    display: inline-block;
+    padding: .15em .55em;
+    border-radius: .25rem;
+    font-size: .75rem;
+    background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.12);
+  }
+
+  .toggle-btn {
+    padding: .25rem .75rem;
+    font-size: .8rem;
+    border-radius: .3rem;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .toggle-btn.on  { background: #26a69a22; color: #26a69a; border: 1px solid #26a69a55; }
+  .toggle-btn.off { background: #ef535022; color: #ef5350; border: 1px solid #ef535055; }
+
+  .link-sm { font-size: .8rem; }
+
+  /* ── Signals panel ──────────────────────────────────── */
+  #signals-panel {
+    margin-top: 1rem;
+    padding: .75rem 1rem;
+    border: 1px solid var(--muted-border-color, #333);
+    border-radius: .5rem;
+    min-height: 60px;
+    font-size: .85rem;
+  }
+  .signal-row { display: flex; gap: 1rem; padding: .3rem 0; border-bottom: 1px solid #22262e; }
+  .signal-row:last-child { border-bottom: none; }
+  .sig-buy  { color: #26a69a; font-weight: 700; }
+  .sig-sell { color: #ef5350; font-weight: 700; }
+
+  /* ── Positions table ─────────────────────────────────── */
+  .pos-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  .pos-table th { padding: .35rem .5rem; border-bottom: 1px solid #333; color: var(--muted-color); font-size:.75rem; text-transform:uppercase; }
+  .pos-table td { padding: .4rem .5rem; }
+
+  /* ── Seed / action bar ─────────────────────────────── */
+  .action-bar { display: flex; gap: .75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  .action-bar h2 { margin: 0; flex: 1; }
+
+  /* htmx loading indicator */
+  .htmx-request .toggle-btn { opacity: .5; pointer-events: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Strategy Engine</h1>
+
+<!-- ── Paper portfolio ─────────────────────────────────────────────────── -->
+<section>
+  <h3 style="margin-bottom:.5rem;">Paper Portfolio</h3>
+  <div class="paper-banner"
+       hx-get="/strategies/paper/snapshot"
+       hx-trigger="every 10s"
+       hx-swap="innerHTML"
+       id="paper-banner-inner">
+    {% set pnl_cls = "up" if snap.day_pnl >= 0 else "down" %}
+    {% set unreal_cls = "up" if snap.unrealised_pnl >= 0 else "down" %}
+    <div class="paper-card">
+      <div class="label">Cash</div>
+      <div class="value neu">₹{{ "{:,.0f}".format(snap.cash) }}</div>
+    </div>
+    <div class="paper-card">
+      <div class="label">Portfolio Value</div>
+      <div class="value neu">₹{{ "{:,.0f}".format(snap.total_value) }}</div>
+    </div>
+    <div class="paper-card">
+      <div class="label">Day P&amp;L</div>
+      <div class="value {{ pnl_cls }}">{{ "{:+,.0f}".format(snap.day_pnl) }}</div>
+    </div>
+    <div class="paper-card">
+      <div class="label">Unrealised P&amp;L</div>
+      <div class="value {{ unreal_cls }}">{{ "{:+,.0f}".format(snap.unrealised_pnl) }}</div>
+    </div>
+    <div class="paper-card">
+      <div class="label">Realised P&amp;L</div>
+      <div class="value {{ "up" if snap.realised_pnl >= 0 else "down" }}">{{ "{:+,.0f}".format(snap.realised_pnl) }}</div>
+    </div>
+    <div class="paper-card">
+      <div class="label">Open Positions</div>
+      <div class="value neu">{{ snap.open_positions }}</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Open positions ──────────────────────────────────────────────────── -->
+{% if snap.positions %}
+<section style="margin-bottom:1.5rem;">
+  <h4>Open Positions</h4>
+  <table class="pos-table">
+    <thead>
+      <tr><th>Symbol</th><th>Qty</th><th>Avg Price</th><th>LTP</th><th>P&amp;L</th></tr>
+    </thead>
+    <tbody>
+      {% for p in snap.positions %}
+      <tr>
+        <td><strong>{{ p.symbol }}</strong></td>
+        <td>{{ p.qty }}</td>
+        <td>₹{{ "{:,.2f}".format(p.avg_price) }}</td>
+        <td>₹{{ "{:,.2f}".format(p.ltp) }}</td>
+        <td class="{{ 'up' if p.pnl >= 0 else 'down' }}">{{ "{:+,.2f}".format(p.pnl) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
 {% endif %}
+
+<!-- ── Strategies list ─────────────────────────────────────────────────── -->
+<section>
+  <div class="action-bar">
+    <h2>Strategies</h2>
+    {% if strategies|length == 0 %}
+    <button
+      hx-post="/strategies/seed"
+      hx-on::after-request="window.location.reload()"
+      class="outline"
+      style="font-size:.85rem;padding:.3rem .9rem;"
+    >+ Seed defaults</button>
+    {% endif %}
+  </div>
+
+  {% if strategies %}
+  <table class="strat-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Strategy</th>
+        <th>Symbols</th>
+        <th>Timeframe</th>
+        <th>Status</th>
+        <th>Signals</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in strategies %}
+      <tr id="strat-row-{{ s.id }}" class="{% if s.enabled %}enabled{% endif %}">
+        <td class="strat-name">{{ s.name }}</td>
+        <td><code>{{ s.class_name }}</code></td>
+        <td>{{ s.symbols }}</td>
+        <td><span class="badge">{{ s.timeframe }}</span></td>
+        <td>
+          <button
+            class="toggle-btn {% if s.enabled %}on{% else %}off{% endif %}"
+            hx-post="/strategies/{{ s.id }}/toggle"
+            hx-target="#strat-row-{{ s.id }}"
+            hx-swap="outerHTML"
+          >
+            {% if s.enabled %}&#9646;&#9646; Enabled{% else %}&#9654; Disabled{% endif %}
+          </button>
+        </td>
+        <td>
+          <a href="#signals-panel" class="link-sm"
+             hx-get="/strategies/{{ s.id }}/signals"
+             hx-target="#signals-panel"
+             hx-swap="innerHTML">View</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p><em>No strategies yet. Click "+ Seed defaults" to add the 3 starter strategies.</em></p>
+  {% endif %}
+</section>
+
+<!-- ── Signal log panel ────────────────────────────────────────────────── -->
+<section>
+  <h4>Signal / Trade Log</h4>
+  <div id="signals-panel">
+    <em style="color:var(--muted-color);">Click "View" next to a strategy to see its signals.</em>
+  </div>
+</section>
+
+<!-- ── Recent trades ──────────────────────────────────────────────────── -->
+<section style="margin-top:1.5rem;">
+  <h4>Recent Trades (all strategies)</h4>
+  <div id="trades-panel"
+       hx-get="/strategies/paper/trades"
+       hx-trigger="load, every 30s"
+       hx-swap="innerHTML">
+    <em style="color:var(--muted-color);">Loading…</em>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Render trades panel from JSON response */
+document.body.addEventListener("htmx:afterSwap", function(e) {
+  if (e.detail.target.id !== "trades-panel") return;
+  try {
+    const trades = JSON.parse(e.detail.xhr.responseText);
+    if (!Array.isArray(trades) || trades.length === 0) {
+      e.detail.target.innerHTML = "<em style='color:var(--muted-color)'>No trades yet.</em>";
+      return;
+    }
+    let html = `<table class="pos-table">
+      <thead><tr><th>#</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Fill ₹</th><th>Notes</th><th>Time</th></tr></thead>
+      <tbody>`;
+    for (const t of trades) {
+      const side_cls = t.side === "BUY" ? "sig-buy" : "sig-sell";
+      const ts = t.filled_at ? new Date(t.filled_at).toLocaleString("en-IN") : "—";
+      html += `<tr>
+        <td>${t.id}</td>
+        <td><strong>${t.symbol}</strong></td>
+        <td class="${side_cls}">${t.side}</td>
+        <td>${t.qty}</td>
+        <td>₹${(t.fill_price||0).toFixed(2)}</td>
+        <td style="font-size:.78rem;color:var(--muted-color)">${t.notes||""}</td>
+        <td style="font-size:.78rem">${ts}</td>
+      </tr>`;
+    }
+    html += `</tbody></table>`;
+    e.detail.target.innerHTML = html;
+  } catch(err) { /* leave existing content */ }
+});
+
+/* Render signals panel from JSON response */
+document.body.addEventListener("htmx:afterSwap", function(e) {
+  if (e.detail.target.id !== "signals-panel") return;
+  try {
+    const sigs = JSON.parse(e.detail.xhr.responseText);
+    if (!Array.isArray(sigs) || sigs.length === 0) {
+      e.detail.target.innerHTML = "<em style='color:var(--muted-color)'>No signals yet for this strategy.</em>";
+      return;
+    }
+    let html = "";
+    for (const s of sigs) {
+      const side_cls = s.side === "BUY" ? "sig-buy" : "sig-sell";
+      const ts = s.filled_at ? new Date(s.filled_at).toLocaleString("en-IN") : "";
+      html += `<div class="signal-row">
+        <span class="${side_cls}">${s.side}</span>
+        <span><strong>${s.symbol}</strong></span>
+        <span>qty ${s.qty} @ ₹${(s.fill_price||0).toFixed(2)}</span>
+        <span style="color:var(--muted-color);font-size:.8rem">${s.pnl_note||""}</span>
+        <span style="margin-left:auto;font-size:.78rem;color:var(--muted-color)">${ts}</span>
+      </div>`;
+    }
+    e.detail.target.innerHTML = html;
+  } catch(err) { /* leave existing content */ }
+});
+
+/* Render paper banner from JSON response */
+document.body.addEventListener("htmx:afterSwap", function(e) {
+  if (e.detail.target.id !== "paper-banner-inner") return;
+  try {
+    const s = JSON.parse(e.detail.xhr.responseText);
+    const pnl_cls = s.day_pnl >= 0 ? "up" : "down";
+    const u_cls = s.unrealised_pnl >= 0 ? "up" : "down";
+    const r_cls = s.realised_pnl >= 0 ? "up" : "down";
+    e.detail.target.innerHTML = `
+      <div class="paper-card"><div class="label">Cash</div><div class="value neu">₹${s.cash.toLocaleString("en-IN",{maximumFractionDigits:0})}</div></div>
+      <div class="paper-card"><div class="label">Portfolio Value</div><div class="value neu">₹${s.total_value.toLocaleString("en-IN",{maximumFractionDigits:0})}</div></div>
+      <div class="paper-card"><div class="label">Day P&L</div><div class="value ${pnl_cls}">${s.day_pnl >= 0 ? '+' : ''}${s.day_pnl.toLocaleString("en-IN",{maximumFractionDigits:0})}</div></div>
+      <div class="paper-card"><div class="label">Unrealised P&L</div><div class="value ${u_cls}">${s.unrealised_pnl >= 0 ? '+' : ''}${s.unrealised_pnl.toLocaleString("en-IN",{maximumFractionDigits:0})}</div></div>
+      <div class="paper-card"><div class="label">Realised P&L</div><div class="value ${r_cls}">${s.realised_pnl >= 0 ? '+' : ''}${s.realised_pnl.toLocaleString("en-IN",{maximumFractionDigits:0})}</div></div>
+      <div class="paper-card"><div class="label">Open Positions</div><div class="value neu">${s.open_positions}</div></div>`;
+  } catch(err) {}
+});
+</script>
 {% endblock %}
