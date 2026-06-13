@@ -1,13 +1,371 @@
 {% extends "base.html" %}
 
+{% block head %}
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+/* ── Chart page layout ──────────────────────────────────────────────── */
+#chart-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+#symbol-select {
+  font-size: 1.1rem;
+  font-weight: 700;
+  padding: 0.25rem 0.5rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: 6px;
+  color: var(--pico-color);
+  min-width: 130px;
+}
+#ltp-badge {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #4ade80;
+  min-width: 130px;
+}
+.ltp-time { font-size: 0.75rem; color: var(--pico-muted-color); }
+
+/* Timeframe & indicator buttons */
+.btn-group { display: flex; gap: 0.35rem; align-items: center; }
+.tf-btn, .ind-btn {
+  padding: 0.25rem 0.65rem;
+  font-size: 0.82rem;
+  border-radius: 5px;
+  border: 1px solid var(--pico-muted-border-color);
+  background: transparent;
+  color: var(--pico-color);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.tf-btn.active, .tf-btn:hover { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+.ind-btn.active { border-color: currentColor; opacity: 1; }
+.ind-btn { opacity: 0.5; }
+
+/* Chart containers */
+#chart-wrap  { position: relative; border-radius: 8px; border: 1px solid #1e293b; }
+#chart-price { height: 420px; }
+#chart-rsi   { height: 110px; border-top: 1px solid #1e293b; }
+#chart-macd  { height: 110px; border-top: 1px solid #1e293b; }
+.chart-label {
+  position: absolute;
+  left: 8px;
+  font-size: 0.7rem;
+  color: #64748b;
+  pointer-events: none;
+  z-index: 10;
+}
+#label-price { top:   4px; }
+#label-rsi   { top: 534px; }
+#label-macd  { top: 648px; }
+
+/* Status bar */
+#chart-status {
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--pico-muted-color);
+}
+.market-open  { color: #4ade80; }
+.market-close { color: #f87171; }
+</style>
+{% endblock %}
+
 {% block content %}
-<h1>{{ symbol }}</h1>
-<p>Candlestick chart with indicator overlays — coming in chart-ui task.</p>
-<div id="chart-container" style="height: 500px; background: var(--pico-card-background-color); border-radius: 8px;">
-  <p style="padding: 2rem; text-align: center; opacity: 0.6;">Chart will render here</p>
+<!-- ── Header ──────────────────────────────────────────────────────── -->
+<div id="chart-header">
+
+  <!-- Symbol selector -->
+  <select id="symbol-select" onchange="onSymbolChange(this.value)">
+    {% for s in symbols %}
+    <option value="{{ s }}" {% if s == symbol %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+
+  <!-- LTP (polled by HTMX every 5 s during market hours) -->
+  <div id="ltp-badge"
+    {% if market_open %}
+    hx-get="/chart/ltp/{{ symbol }}"
+    hx-trigger="every 5s"
+    hx-swap="innerHTML"
+    {% endif %}>
+    <span class="ltp-value">loading…</span>
+  </div>
+
+  <!-- Timeframe buttons -->
+  <div class="btn-group" id="tf-group">
+    {% for tf in ["1m","5m","15m","30m","1d"] %}
+    <button class="tf-btn {% if tf == timeframe %}active{% endif %}"
+            data-tf="{{ tf }}"
+            onclick="setTimeframe('{{ tf }}')">{{ tf }}</button>
+    {% endfor %}
+  </div>
+
+  <!-- Indicator toggles -->
+  <div class="btn-group" id="ind-group">
+    <button class="ind-btn active" data-ind="ema"  style="color:#3b82f6;" onclick="toggleInd(this,'ema')">EMA</button>
+    <button class="ind-btn active" data-ind="bb"   style="color:#a78bfa;" onclick="toggleInd(this,'bb')">BB</button>
+    <button class="ind-btn active" data-ind="rsi"  style="color:#fb923c;" onclick="toggleInd(this,'rsi')">RSI</button>
+    <button class="ind-btn active" data-ind="macd" style="color:#34d399;" onclick="toggleInd(this,'macd')">MACD</button>
+  </div>
+</div>
+
+<!-- ── Chart area ─────────────────────────────────────────────────── -->
+<div id="chart-wrap">
+  <span class="chart-label" id="label-price">PRICE + EMA + BB</span>
+  <span class="chart-label" id="label-rsi">RSI (14)</span>
+  <span class="chart-label" id="label-macd">MACD (12,26,9)</span>
+  <div id="chart-price"></div>
+  <div id="chart-rsi"></div>
+  <div id="chart-macd"></div>
+</div>
+
+<div id="chart-status">
+  <span id="bar-count">—</span> bars ·
+  <span id="market-status"
+        class="{% if market_open %}market-open{% else %}market-close{% endif %}">
+    {% if market_open %}Market open{% else %}Market closed{% endif %}
+  </span>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+// ── State ──────────────────────────────────────────────────────────────
+let currentSymbol   = "{{ symbol }}";
+let currentTf       = "{{ timeframe }}";
+const THEME = {
+  bg:       "#0f172a",
+  grid:     "#1e293b",
+  text:     "#e2e8f0",
+  ema9:     "#3b82f6",
+  ema21:    "#f59e0b",
+  ema50:    "#ef4444",
+  bbUpper:  "#a78bfa",
+  bbLower:  "#a78bfa",
+  bbMid:    "#6d28d9",
+  rsi:      "#fb923c",
+  macdLine: "#34d399",
+  macdSig:  "#f472b6",
+  macdBull: "#22c55e",
+  macdBear: "#ef4444",
+};
+
+// Active indicator toggles
+const indActive = { ema: true, bb: true, rsi: true, macd: true };
+
+// ── Chart instances ────────────────────────────────────────────────────
+let priceChart, rsiChart, macdChart;
+let candleSeries, volSeries;
+let ema9s, ema21s, ema50s, bbUpperS, bbLowerS, bbMidS;
+let rsiSeries, rsiOb, rsiOs;
+let macdLineSeries, macdSigSeries, macdHistSeries;
+
+function chartOpts(timeVisible) {
+  return {
+    layout:    { background: { color: THEME.bg }, textColor: THEME.text },
+    grid:      { vertLines: { color: THEME.grid }, horzLines: { color: THEME.grid } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    timeScale: { timeVisible, secondsVisible: false, borderColor: THEME.grid },
+    rightPriceScale: { borderColor: THEME.grid },
+    handleScale: true,
+    handleScroll: true,
+  };
+}
+
+function initCharts(isIntraday) {
+  // Destroy old instances
+  [priceChart, rsiChart, macdChart].forEach(c => c && c.remove());
+
+  priceChart = LightweightCharts.createChart(
+    document.getElementById("chart-price"), chartOpts(isIntraday));
+
+  rsiChart = LightweightCharts.createChart(
+    document.getElementById("chart-rsi"), {
+      ...chartOpts(isIntraday),
+      rightPriceScale: { borderColor: THEME.grid, scaleMargins: { top: 0.05, bottom: 0.05 } },
+    });
+
+  macdChart = LightweightCharts.createChart(
+    document.getElementById("chart-macd"), {
+      ...chartOpts(isIntraday),
+      rightPriceScale: { borderColor: THEME.grid, scaleMargins: { top: 0.1, bottom: 0.1 } },
+    });
+
+  // ── Price chart series ──────────────────────────────────────────────
+  candleSeries = priceChart.addCandlestickSeries({
+    upColor: "#22c55e", downColor: "#ef4444",
+    borderUpColor: "#22c55e", borderDownColor: "#ef4444",
+    wickUpColor: "#22c55e", wickDownColor: "#ef4444",
+  });
+
+  ema9s   = priceChart.addLineSeries({ color: THEME.ema9,   lineWidth: 1, priceLineVisible: false });
+  ema21s  = priceChart.addLineSeries({ color: THEME.ema21,  lineWidth: 1, priceLineVisible: false });
+  ema50s  = priceChart.addLineSeries({ color: THEME.ema50,  lineWidth: 1.5, priceLineVisible: false });
+  bbUpperS = priceChart.addLineSeries({ color: THEME.bbUpper, lineWidth: 1, lineStyle: 1, priceLineVisible: false });
+  bbLowerS = priceChart.addLineSeries({ color: THEME.bbLower, lineWidth: 1, lineStyle: 1, priceLineVisible: false });
+  bbMidS   = priceChart.addLineSeries({ color: THEME.bbMid,   lineWidth: 1, lineStyle: 2, priceLineVisible: false });
+
+  // ── RSI chart series ────────────────────────────────────────────────
+  rsiSeries = rsiChart.addLineSeries({ color: THEME.rsi, lineWidth: 1.5, priceLineVisible: false });
+  // Overbought / oversold reference lines
+  rsiOb = rsiChart.addLineSeries({ color: "#475569", lineWidth: 1, lineStyle: 2, priceLineVisible: false });
+  rsiOs = rsiChart.addLineSeries({ color: "#475569", lineWidth: 1, lineStyle: 2, priceLineVisible: false });
+
+  // ── MACD chart series ───────────────────────────────────────────────
+  macdLineSeries = macdChart.addLineSeries({ color: THEME.macdLine, lineWidth: 1.5, priceLineVisible: false });
+  macdSigSeries  = macdChart.addLineSeries({ color: THEME.macdSig,  lineWidth: 1,   priceLineVisible: false });
+  macdHistSeries = macdChart.addHistogramSeries({
+    color: THEME.macdBull,
+    priceFormat: { type: "price", precision: 4, minMove: 0.0001 },
+    priceLineVisible: false,
+  });
+
+  // ── Sync crosshair + scroll across charts ──────────────────────────
+  syncCharts(priceChart, rsiChart, macdChart);
+}
+
+function syncCharts(...charts) {
+  charts.forEach((src, i) => {
+    src.timeScale().subscribeVisibleLogicalRangeChange(range => {
+      charts.forEach((dst, j) => {
+        if (i !== j && range) dst.timeScale().setVisibleLogicalRange(range);
+      });
+    });
+  });
+}
+
+// ── Data loading ───────────────────────────────────────────────────────
+async function loadChartData(symbol, tf) {
+  document.getElementById("bar-count").textContent = "loading…";
+  try {
+    const res = await fetch(`/chart/data?symbol=${symbol}&tf=${tf}&limit=750`);
+    const data = await res.json();
+    renderChart(data);
+  } catch (err) {
+    console.error("Failed to load chart data:", err);
+    document.getElementById("bar-count").textContent = "error";
+  }
+}
+
+function renderChart(data) {
+  const isIntraday = data.timeframe !== "1d";
+  initCharts(isIntraday);
+  applyChartWidth();
+
+  // ── Candles ──────────────────────────────────────────────────────────
+  if (data.candles.length) {
+    candleSeries.setData(data.candles);
+  }
+
+  const ind = data.indicators;
+
+  // ── EMAs ─────────────────────────────────────────────────────────────
+  const showEma = indActive.ema;
+  setSeriesVisibility(ema9s,  showEma, ind.ema9  || []);
+  setSeriesVisibility(ema21s, showEma, ind.ema21 || []);
+  setSeriesVisibility(ema50s, showEma, ind.ema50 || []);
+
+  // ── Bollinger Bands ───────────────────────────────────────────────────
+  const showBb = indActive.bb;
+  setSeriesVisibility(bbUpperS, showBb, ind.bb_upper || []);
+  setSeriesVisibility(bbLowerS, showBb, ind.bb_lower || []);
+  setSeriesVisibility(bbMidS,   showBb, ind.bb_mid   || []);
+
+  // ── RSI ──────────────────────────────────────────────────────────────
+  const showRsi = indActive.rsi;
+  if (showRsi && ind.rsi && ind.rsi.length) {
+    rsiSeries.setData(ind.rsi);
+    // Reference lines at 70 / 30
+    const times = ind.rsi.map(p => p.time);
+    rsiOb.setData(times.map(t => ({ time: t, value: 70 })));
+    rsiOs.setData(times.map(t => ({ time: t, value: 30 })));
+  }
+  rsiChart.applyOptions({ height: showRsi ? 110 : 0 });
+  document.getElementById("chart-rsi").style.display  = showRsi ? "block" : "none";
+  document.getElementById("label-rsi").style.display  = showRsi ? "block" : "none";
+
+  // ── MACD ─────────────────────────────────────────────────────────────
+  const showMacd = indActive.macd;
+  if (showMacd) {
+    if (ind.macd_line)   macdLineSeries.setData(ind.macd_line);
+    if (ind.macd_signal) macdSigSeries.setData(ind.macd_signal);
+    if (ind.macd_hist) {
+      macdHistSeries.setData(ind.macd_hist.map(p => ({
+        ...p, color: p.value >= 0 ? THEME.macdBull : THEME.macdBear,
+      })));
+    }
+  }
+  document.getElementById("chart-macd").style.display = showMacd ? "block" : "none";
+  document.getElementById("label-macd").style.display = showMacd ? "block" : "none";
+
+  // ── Update LTP from data payload (fall back to last close when market closed) ─
+  const displayLtp  = data.ltp || (data.candles.length ? data.candles[data.candles.length - 1].close : null);
+  const ltpIsLive   = !!data.ltp;
+  if (displayLtp) {
+    const fmt = displayLtp.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const badge = document.getElementById("ltp-badge");
+    badge.innerHTML = `<span class="ltp-value">₹${fmt}</span>` +
+                      (ltpIsLive ? "" : `<span class="ltp-time" style="color:#64748b;"> prev close</span>`);
+  }
+
+  document.getElementById("bar-count").textContent = `${data.count.toLocaleString()}`;
+
+  // Scroll price chart to the most recent bar
+  priceChart.timeScale().scrollToRealTime();
+}
+
+function setSeriesVisibility(series, visible, data) {
+  series.setData(data);
+  series.applyOptions({ visible });
+}
+
+// ── Controls ───────────────────────────────────────────────────────────
+function setTimeframe(tf) {
+  currentTf = tf;
+  document.querySelectorAll(".tf-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.tf === tf);
+  });
+  // Update HTMX LTP polling URL
+  const badge = document.getElementById("ltp-badge");
+  if (badge.hasAttribute("hx-get")) {
+    badge.setAttribute("hx-get", `/chart/ltp/${currentSymbol}`);
+  }
+  loadChartData(currentSymbol, tf);
+}
+
+function onSymbolChange(sym) {
+  currentSymbol = sym;
+  // Update page URL without reload
+  history.replaceState(null, "", `/chart/${sym}?tf=${currentTf}`);
+  // Update LTP polling symbol
+  const badge = document.getElementById("ltp-badge");
+  if (badge.hasAttribute("hx-get")) {
+    badge.setAttribute("hx-get", `/chart/ltp/${sym}`);
+    htmx.process(badge);    // re-bind HTMX after attribute change
+  }
+  loadChartData(sym, currentTf);
+}
+
+function toggleInd(btn, key) {
+  indActive[key] = !indActive[key];
+  btn.classList.toggle("active", indActive[key]);
+  loadChartData(currentSymbol, currentTf);
+}
+
+// ── Responsive resize ──────────────────────────────────────────────────
+function applyChartWidth() {
+  const w = document.getElementById("chart-price").clientWidth;
+  if (w > 0) {
+    [priceChart, rsiChart, macdChart].forEach(c => c && c.applyOptions({ width: w }));
+  }
+}
+const resizeObs = new ResizeObserver(applyChartWidth);
+resizeObs.observe(document.querySelector("main"));
+
+// ── Initial load ───────────────────────────────────────────────────────
+loadChartData(currentSymbol, currentTf);
+</script>
 {% endblock %}
