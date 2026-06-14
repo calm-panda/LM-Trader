@@ -110,6 +110,27 @@
     <button class="ind-btn active" data-ind="rsi"  style="color:#fb923c;" onclick="toggleInd(this,'rsi')">RSI</button>
     <button class="ind-btn active" data-ind="macd" style="color:#34d399;" onclick="toggleInd(this,'macd')">MACD</button>
   </div>
+
+  <!-- AI analysis button -->
+  <button id="ai-btn" onclick="openAIAnalysis()"
+    style="font-size:.8rem;padding:.25rem .75rem;border-radius:5px;border:1px solid #7c9ef855;
+           background:#7c9ef811;color:#7c9ef8;cursor:pointer;">
+    ✦ AI Analysis
+  </button>
+</div>
+
+<!-- AI Analysis panel (hidden until opened) -->
+<div id="ai-panel" style="display:none;margin-bottom:1rem;
+  background:#1a1f2e;border:1px solid #2d3a6e;border-radius:.5rem;padding:1rem;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;">
+    <strong style="color:#7c9ef8;">✦ DeepSeek Analysis — <span id="ai-panel-label"></span></strong>
+    <button onclick="document.getElementById('ai-panel').style.display='none'"
+      style="background:none;border:none;color:var(--muted-color);cursor:pointer;font-size:1.1rem;">✕</button>
+  </div>
+  <div id="ai-content" style="font-size:.88rem;line-height:1.6;white-space:pre-wrap;word-break:break-word;
+    min-height:60px;color:#d1d5db;">
+    <span style="color:#7c9ef8;">Analyzing…</span>
+  </div>
 </div>
 
 <!-- ── Chart area ─────────────────────────────────────────────────── -->
@@ -367,5 +388,42 @@ resizeObs.observe(document.querySelector("main"));
 
 // ── Initial load ───────────────────────────────────────────────────────
 loadChartData(currentSymbol, currentTf);
+
+// ── AI Analysis ─────────────────────────────────────────────────────────
+async function openAIAnalysis() {
+  const panel = document.getElementById('ai-panel');
+  const content = document.getElementById('ai-content');
+  const label = document.getElementById('ai-panel-label');
+  const btn = document.getElementById('ai-btn');
+
+  panel.style.display = 'block';
+  label.textContent = currentSymbol + ' · ' + currentTf;
+  content.innerHTML = '<span style="color:#7c9ef8;">⏳ Calling DeepSeek…</span>';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch('/ai/chart-analysis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol: currentSymbol, timeframe: currentTf }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      // Minimal markdown render
+      content.innerHTML = data.analysis
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g,'<em>$1</em>')
+        .replace(/`([^`]+)`/g,'<code>$1</code>')
+        .replace(/\n/g,'<br>');
+    } else {
+      content.innerHTML = '<span style="color:#ef5350">Error: ' + (data.detail || JSON.stringify(data)) + '</span>';
+    }
+  } catch(e) {
+    content.textContent = 'Network error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
 </script>
 {% endblock %}

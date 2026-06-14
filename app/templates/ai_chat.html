@@ -1,13 +1,387 @@
 {% extends "base.html" %}
 
+{% block head %}
+<style>
+  /* ── Tab navigation ─────────────────────────────────── */
+  .ai-tabs { display: flex; gap: .25rem; margin-bottom: 1.5rem; border-bottom: 2px solid var(--muted-border-color, #333); }
+  .ai-tab {
+    padding: .5rem 1.2rem; cursor: pointer; font-size: .9rem; font-weight: 600;
+    border: none; background: none; color: var(--muted-color); border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+  }
+  .ai-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+  .ai-panel { display: none; }
+  .ai-panel.active { display: block; }
+
+  /* ── Chat bubbles ───────────────────────────────────── */
+  #chat-log { min-height: 200px; max-height: 55vh; overflow-y: auto; margin-bottom: 1rem; }
+  .bubble { margin-bottom: .75rem; }
+  .bubble .who { font-size: .72rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; margin-bottom: .2rem; }
+  .bubble.user .who { color: #7c9ef8; }
+  .bubble.ai   .who { color: #26a69a; }
+  .bubble .text {
+    background: var(--card-background-color, #1e2129);
+    border: 1px solid var(--muted-border-color, #333);
+    border-radius: .45rem; padding: .55rem .75rem;
+    font-size: .9rem; line-height: 1.55;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .bubble.user .text { background: #1a2140; border-color: #2d3a6e; }
+
+  /* ── Input row ──────────────────────────────────────── */
+  .chat-input-row { display: flex; gap: .5rem; }
+  .chat-input-row textarea { flex: 1; resize: vertical; min-height: 60px; font-size: .9rem; }
+
+  /* ── Analysis / sentiment panels ───────────────────── */
+  .result-box {
+    background: var(--card-background-color, #1e2129);
+    border: 1px solid var(--muted-border-color, #333);
+    border-radius: .5rem; padding: 1rem 1.2rem;
+    min-height: 80px; font-size: .9rem; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .result-box.empty { color: var(--muted-color); font-style: italic; }
+
+  /* ── Sentiment meter ────────────────────────────────── */
+  .sentiment-meter { display: flex; align-items: center; gap: .75rem; margin: .75rem 0; }
+  .meter-bar { flex: 1; height: 12px; border-radius: 6px; background: #22262e; overflow: hidden; }
+  .meter-fill { height: 100%; border-radius: 6px; transition: width .5s; }
+  .sent-bull { background: #26a69a; }
+  .sent-bear { background: #ef5350; }
+  .sent-neu  { background: #ffa726; }
+  .sentiment-badge { font-weight: 700; font-size: 1rem; min-width: 80px; }
+
+  /* ── Code block ─────────────────────────────────────── */
+  pre code {
+    display: block; overflow-x: auto;
+    background: #0e1117; padding: 1rem; border-radius: .45rem;
+    font-size: .82rem; line-height: 1.5;
+    border: 1px solid #2a2e3a;
+  }
+
+  /* ── Loading indicator ──────────────────────────────── */
+  .loading { color: var(--muted-color); font-size: .85rem; }
+  .spin-sm { display: inline-block; width: 12px; height: 12px; border: 2px solid #555;
+    border-top-color: var(--primary); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Form helpers ───────────────────────────────────── */
+  .field { margin-bottom: .8rem; }
+  .field label { font-size: .85rem; font-weight: 600; display: block; margin-bottom: .2rem; }
+  .field select, .field input { font-size: .85rem; padding: .4rem .6rem; border-radius: .35rem;
+    border: 1px solid var(--muted-border-color, #444);
+    background: var(--background-color, #13151a); color: var(--color); width: 100%; }
+</style>
+{% endblock %}
+
 {% block content %}
-<h1>AI Chat</h1>
-<p>Ask DeepSeek about markets, strategies, and risk.</p>
-<form>
-  <label>
-    Message
-    <textarea name="message" placeholder="Analyze RELIANCE on 5m timeframe..." rows="4" disabled></textarea>
-  </label>
-  <button type="submit" disabled>Send</button>
-</form>
+<h1>AI Assistant <span style="font-size:.8rem;font-weight:400;color:var(--muted-color);">powered by DeepSeek</span></h1>
+
+<!-- ── Tabs ─────────────────────────────────────────────────────────────── -->
+<div class="ai-tabs">
+  <button class="ai-tab active" onclick="switchTab('chat')">💬 Chat</button>
+  <button class="ai-tab" onclick="switchTab('chart')">📊 Chart Analyzer</button>
+  <button class="ai-tab" onclick="switchTab('strategy')">⚙ Strategy Builder</button>
+  <button class="ai-tab" onclick="switchTab('sentiment')">📰 Sentiment</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- Tab 1 — Free-form chat                                                -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div id="panel-chat" class="ai-panel active">
+  <div id="chat-log">
+    <div class="bubble ai">
+      <div class="who">AI</div>
+      <div class="text">Hi! I'm your NSE trading assistant powered by DeepSeek.
+Ask me anything about market analysis, trading strategies, risk management, or Python code.</div>
+    </div>
+  </div>
+  <div class="chat-input-row">
+    <textarea id="chat-input" placeholder="Ask about markets, strategies, indicators…"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+    <button onclick="sendChat()" id="chat-send-btn" style="align-self:flex-end;">Send</button>
+  </div>
+  <p style="font-size:.75rem;color:var(--muted-color);margin-top:.3rem;">
+    Shift+Enter for new line · Enter to send
+  </p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- Tab 2 — Chart analysis                                                -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div id="panel-chart" class="ai-panel">
+  <p style="color:var(--muted-color);font-size:.9rem;">
+    Fetches the latest candles + indicator values from the database and asks DeepSeek to analyze them.
+  </p>
+
+  <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;">
+    <div class="field" style="flex:1;min-width:150px;">
+      <label>Symbol</label>
+      <select id="ca-symbol">
+        {% for s in symbols %}<option>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field" style="flex:1;min-width:120px;">
+      <label>Timeframe</label>
+      <select id="ca-tf">
+        <option value="1m">1m</option>
+        <option value="5m" selected>5m</option>
+        <option value="15m">15m</option>
+        <option value="1d">Daily</option>
+      </select>
+    </div>
+    <div style="align-self:flex-end;margin-bottom:.8rem;">
+      <button onclick="analyzeChart()" id="ca-btn">Analyze</button>
+    </div>
+  </div>
+
+  <div id="ca-result" class="result-box empty">
+    Chart analysis will appear here…
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- Tab 3 — Strategy builder                                              -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div id="panel-strategy" class="ai-panel">
+  <p style="color:var(--muted-color);font-size:.9rem;">
+    Describe a strategy in plain English — DeepSeek R1 (reasoning model) generates a
+    <code>BaseStrategy</code> subclass ready to backtest.
+  </p>
+
+  <div class="field">
+    <label>Strategy description</label>
+    <textarea id="sg-desc" rows="4"
+      placeholder="e.g. Buy when RSI crosses above 30 and price is above the 50 EMA. Sell when RSI crosses above 70 or price falls below the 21 EMA."></textarea>
+  </div>
+  <button onclick="generateStrategy()" id="sg-btn">Generate Strategy Code</button>
+
+  <div id="sg-result" style="margin-top:1rem;display:none;">
+    <h4>Generated Code</h4>
+    <div style="position:relative;">
+      <button onclick="copyCode()" style="position:absolute;top:.5rem;right:.5rem;font-size:.75rem;padding:.2rem .6rem;" class="outline">Copy</button>
+      <pre><code id="sg-code"></code></pre>
+    </div>
+    <p style="font-size:.82rem;color:var(--muted-color);">
+      Review the code, then save it as a <code>.py</code> file in
+      <code>app/services/strategies/</code>, register it in
+      <code>app/services/strategies/__init__.py</code>, and run a backtest before enabling.
+    </p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- Tab 4 — Sentiment                                                     -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div id="panel-sentiment" class="ai-panel">
+  <p style="color:var(--muted-color);font-size:.9rem;">
+    Analyzes market sentiment for a symbol using DeepSeek.
+    Live news headlines are included if <code>NEWSAPI_KEY</code> is configured in <code>.env</code>.
+  </p>
+
+  <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem;align-items:flex-end;">
+    <div class="field" style="flex:1;min-width:150px;">
+      <label>Symbol</label>
+      <select id="sent-symbol">
+        {% for s in symbols %}<option>{{ s }}</option>{% endfor %}
+      </select>
+    </div>
+    <div style="margin-bottom:.8rem;">
+      <button onclick="getSentiment()" id="sent-btn">Analyze Sentiment</button>
+    </div>
+  </div>
+
+  <div id="sent-result" style="display:none;">
+    <div class="sentiment-meter">
+      <div class="meter-bar"><div class="meter-fill" id="sent-fill" style="width:50%"></div></div>
+      <span class="sentiment-badge" id="sent-label">—</span>
+      <span id="sent-score" style="color:var(--muted-color);font-size:.85rem;"></span>
+    </div>
+    <div class="result-box" id="sent-summary" style="margin-bottom:.75rem;"></div>
+    <div id="sent-factors"></div>
+    <div id="sent-headlines" style="margin-top:.75rem;"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Tab switching ──────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.ai-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.ai-panel').forEach(p => p.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+// ── Markdown → HTML (minimal) ──────────────────────────────────────────────
+function mdToHtml(text) {
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/^#{1,4} (.+)$/gm, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+}
+
+// ── Chat ───────────────────────────────────────────────────────────────────
+const _chatHistory = [];
+
+async function sendChat() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  addBubble('user', text);
+  _chatHistory.push({ role: 'user', content: text });
+  input.value = '';
+
+  const btn = document.getElementById('chat-send-btn');
+  btn.disabled = true;
+  const thinkingId = 'think-' + Date.now();
+  addBubble('ai', '<span class="spin-sm"></span> Thinking…', thinkingId);
+
+  try {
+    const r = await fetch('/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: _chatHistory }),
+    });
+    const data = await r.json();
+    const reply = r.ok ? data.reply : ('Error: ' + (data.detail || JSON.stringify(data)));
+    if (r.ok) _chatHistory.push({ role: 'assistant', content: reply });
+
+    // Replace thinking bubble
+    const el = document.getElementById(thinkingId);
+    if (el) el.querySelector('.text').innerHTML = mdToHtml(reply);
+  } catch(e) {
+    const el = document.getElementById(thinkingId);
+    if (el) el.querySelector('.text').textContent = 'Network error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function addBubble(who, html, id) {
+  const log = document.getElementById('chat-log');
+  const div = document.createElement('div');
+  div.className = 'bubble ' + who;
+  if (id) div.id = id;
+  div.innerHTML = '<div class="who">' + (who === 'user' ? 'You' : 'AI') + '</div>'
+    + '<div class="text">' + (who === 'user' ? html.replace(/&/g,'&amp;').replace(/</g,'&lt;') : html) + '</div>';
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+// ── Chart analysis ─────────────────────────────────────────────────────────
+async function analyzeChart() {
+  const btn = document.getElementById('ca-btn');
+  btn.disabled = true; btn.textContent = '⏳ Analyzing…';
+  const box = document.getElementById('ca-result');
+  box.classList.remove('empty'); box.textContent = 'Calling DeepSeek…';
+
+  try {
+    const r = await fetch('/ai/chart-analysis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        symbol: document.getElementById('ca-symbol').value,
+        timeframe: document.getElementById('ca-tf').value,
+      }),
+    });
+    const data = await r.json();
+    box.innerHTML = r.ok ? mdToHtml(data.analysis) : '<span style="color:#ef5350">Error: ' + (data.detail || JSON.stringify(data)) + '</span>';
+  } catch(e) {
+    box.textContent = 'Network error: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Analyze';
+  }
+}
+
+// ── Strategy generation ────────────────────────────────────────────────────
+async function generateStrategy() {
+  const desc = document.getElementById('sg-desc').value.trim();
+  if (!desc) { alert('Please enter a strategy description.'); return; }
+
+  const btn = document.getElementById('sg-btn');
+  btn.disabled = true; btn.textContent = '⏳ Generating (may take 20–40s)…';
+  document.getElementById('sg-result').style.display = 'none';
+
+  try {
+    const r = await fetch('/ai/generate-strategy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: desc }),
+    });
+    const data = await r.json();
+    if (r.ok) {
+      let code = data.code || '';
+      // Strip markdown fences if present
+      code = code.replace(/^```python\s*/i, '').replace(/```\s*$/, '').trim();
+      document.getElementById('sg-code').textContent = code;
+      document.getElementById('sg-result').style.display = 'block';
+    } else {
+      alert('Error: ' + (data.detail || JSON.stringify(data)));
+    }
+  } catch(e) {
+    alert('Network error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Generate Strategy Code';
+  }
+}
+
+function copyCode() {
+  const code = document.getElementById('sg-code').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = event.currentTarget;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+
+// ── Sentiment ──────────────────────────────────────────────────────────────
+async function getSentiment() {
+  const sym = document.getElementById('sent-symbol').value;
+  const btn = document.getElementById('sent-btn');
+  btn.disabled = true; btn.textContent = '⏳ Analyzing…';
+  document.getElementById('sent-result').style.display = 'none';
+
+  try {
+    const r = await fetch('/ai/sentiment/' + sym);
+    const data = await r.json();
+    if (!r.ok) { alert('Error: ' + (data.detail || JSON.stringify(data))); return; }
+
+    const score = data.score || 0;  // -100 to +100
+    const pct = Math.round((score + 100) / 2);  // map to 0-100 for bar width
+    const fill = document.getElementById('sent-fill');
+    fill.style.width = pct + '%';
+    fill.className = 'meter-fill ' + (score > 10 ? 'sent-bull' : score < -10 ? 'sent-bear' : 'sent-neu');
+
+    document.getElementById('sent-label').textContent = (data.sentiment || 'neutral').toUpperCase();
+    document.getElementById('sent-label').style.color = score > 10 ? '#26a69a' : score < -10 ? '#ef5350' : '#ffa726';
+    document.getElementById('sent-score').textContent = 'Score: ' + (score >= 0 ? '+' : '') + score;
+    document.getElementById('sent-summary').innerHTML = mdToHtml(data.summary || '');
+
+    const factors = (data.key_factors || []);
+    document.getElementById('sent-factors').innerHTML = factors.length
+      ? '<strong>Key factors:</strong><ul style="margin:.4rem 0 0 1.2rem;font-size:.88rem;">'
+        + factors.map(f => '<li>' + f.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</li>').join('') + '</ul>'
+      : '';
+
+    const headlines = data.headlines || [];
+    document.getElementById('sent-headlines').innerHTML = headlines.length
+      ? '<strong>Live headlines:</strong><ul style="margin:.4rem 0 0 1.2rem;font-size:.82rem;color:var(--muted-color);">'
+        + headlines.map(h => '<li>' + h.replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</li>').join('') + '</ul>'
+      : '<p style="font-size:.8rem;color:var(--muted-color);">No live headlines (add NEWSAPI_KEY to .env for live news)</p>';
+
+    document.getElementById('sent-result').style.display = 'block';
+  } catch(e) {
+    alert('Network error: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Analyze Sentiment';
+  }
+}
+</script>
 {% endblock %}
