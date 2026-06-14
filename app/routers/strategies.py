@@ -1,4 +1,4 @@
-"""Strategies router — list, seed, toggle enable/disable, view signals."""
+"""Strategies router — list, seed, toggle enable/disable, backtest-approve."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.database import async_session
@@ -183,3 +184,30 @@ async def recent_trades(limit: int = 50):
         }
         for o in orders
     ]
+
+
+# ── Backtest approval gate ─────────────────────────────────────────────────────
+
+class BacktestApproveBody(BaseModel):
+    auto_enable: bool = False
+
+
+@router.post("/strategies/{strategy_id}/approve-backtest")
+async def approve_backtest(strategy_id: int, body: BacktestApproveBody):
+    """Mark strategy as backtest_passed=True (and optionally enable it)."""
+    async with async_session() as db:
+        result = await db.execute(select(Strategy).where(Strategy.id == strategy_id))
+        strat = result.scalar_one_or_none()
+        if strat is None:
+            raise HTTPException(status_code=404, detail="Strategy not found")
+        strat.backtest_passed = True
+        if body.auto_enable:
+            strat.enabled = True
+        await db.commit()
+        await db.refresh(strat)
+    return {
+        "id": strat.id,
+        "name": strat.name,
+        "backtest_passed": strat.backtest_passed,
+        "enabled": strat.enabled,
+    }

@@ -1,19 +1,353 @@
 {% extends "base.html" %}
 
+{% block head %}
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  /* ── Layout ─────────────────────────────────────────────── */
+  .bt-grid { display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem; align-items: start; }
+  @media (max-width: 900px) { .bt-grid { grid-template-columns: 1fr; } }
+
+  /* ── Form card ──────────────────────────────────────────── */
+  .bt-form-card {
+    background: var(--card-background-color, #1e2129);
+    border: 1px solid var(--muted-border-color, #333);
+    border-radius: .6rem;
+    padding: 1.2rem;
+  }
+  .bt-form-card label { font-size: .85rem; font-weight: 600; display: block; margin-bottom: .15rem; }
+  .bt-form-card input, .bt-form-card select, .bt-form-card textarea {
+    width: 100%; font-size: .85rem; padding: .4rem .6rem;
+    border-radius: .35rem;
+    border: 1px solid var(--muted-border-color, #444);
+    background: var(--background-color, #13151a);
+    color: var(--color);
+    margin-bottom: .8rem;
+  }
+  .bt-form-card button[type=submit] { width: 100%; }
+
+  /* ── Metric cards ───────────────────────────────────────── */
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: .6rem; margin-bottom: 1rem; }
+  .metric-card {
+    background: var(--card-background-color, #1e2129);
+    border: 1px solid var(--muted-border-color, #333);
+    border-radius: .5rem;
+    padding: .65rem .8rem;
+    text-align: center;
+  }
+  .metric-card .label { font-size: .65rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted-color); margin-bottom: .2rem; }
+  .metric-card .value { font-size: 1.1rem; font-weight: 700; }
+  .up   { color: #26a69a; }
+  .down { color: #ef5350; }
+  .neu  { color: var(--color); }
+
+  /* ── Gate badge ─────────────────────────────────────────── */
+  .gate-badge {
+    display: inline-block; padding: .3rem 1rem; border-radius: .4rem;
+    font-weight: 700; font-size: .95rem; margin-bottom: 1rem;
+  }
+  .gate-pass { background: #26a69a22; color: #26a69a; border: 1px solid #26a69a55; }
+  .gate-fail { background: #ef535022; color: #ef5350; border: 1px solid #ef535055; }
+
+  /* ── Equity chart ───────────────────────────────────────── */
+  #equity-chart { width: 100%; height: 280px; margin-bottom: 1rem; }
+
+  /* ── Trade table ────────────────────────────────────────── */
+  .trade-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  .trade-table th { padding: .3rem .5rem; border-bottom: 1px solid #333; color: var(--muted-color); font-size: .72rem; text-transform: uppercase; }
+  .trade-table td { padding: .35rem .5rem; border-bottom: 1px solid #22262e; }
+
+  /* ── Loading spinner ────────────────────────────────────── */
+  .spinner { display: none; }
+  .htmx-request .spinner { display: inline-block; }
+  .htmx-request .run-text { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid #555;
+    border-top-color: var(--primary); border-radius: 50%; animation: spin .7s linear infinite; }
+</style>
+{% endblock %}
+
 {% block content %}
-<h1>Backtest</h1>
-<p>Run historical strategy validation before enabling paper or live trading.</p>
-<form>
-  <label>
-    Strategy
-    <select name="strategy" disabled>
-      <option>No strategies yet</option>
+<h1>Backtester</h1>
+<p style="color:var(--muted-color);font-size:.9rem;">
+  Gate thresholds: Sharpe ≥ <strong>{{ sharpe_min }}</strong> &nbsp;|&nbsp;
+  Max drawdown ≤ <strong>{{ max_dd }}%</strong>
+</p>
+
+<div class="bt-grid">
+  <!-- ── Form ──────────────────────────────────────────────────── -->
+  <div class="bt-form-card">
+    <h3 style="margin-top:0;margin-bottom:1rem;">Run Configuration</h3>
+
+    <label>Strategy class</label>
+    <select id="bt-class">
+      {% for r in registry %}
+      <option value="{{ r }}">{{ r }}</option>
+      {% endfor %}
     </select>
-  </label>
-  <label>
-    Symbol
-    <input type="text" name="symbol" placeholder="RELIANCE" disabled>
-  </label>
-  <button type="submit" disabled>Run Backtest</button>
-</form>
+
+    <label>Link to saved strategy (optional)</label>
+    <select id="bt-strategy-id">
+      <option value="">— none —</option>
+      {% for s in strategies %}
+      <option value="{{ s.id }}" data-class="{{ s.class_name }}" data-params="{{ s.params }}">
+        {{ s.name }}
+      </option>
+      {% endfor %}
+    </select>
+
+    <label>Symbol</label>
+    <select id="bt-symbol">
+      {% for sym in symbols %}
+      <option value="{{ sym }}">{{ sym }}</option>
+      {% endfor %}
+      <option value="__custom">Custom…</option>
+    </select>
+    <input type="text" id="bt-symbol-custom" placeholder="RELIANCE" style="display:none;margin-top:-.5rem;">
+
+    <label>Timeframe</label>
+    <select id="bt-tf">
+      <option value="1d" selected>Daily (1d)</option>
+      <option value="15m">15-minute</option>
+      <option value="5m">5-minute</option>
+      <option value="1m">1-minute</option>
+    </select>
+
+    <label>From date</label>
+    <input type="date" id="bt-from">
+
+    <label>To date</label>
+    <input type="date" id="bt-to">
+
+    <label>Strategy params (JSON)</label>
+    <textarea id="bt-params" rows="3" placeholder='{}'></textarea>
+
+    <label>Starting cash (₹)</label>
+    <input type="number" id="bt-cash" value="100000" step="10000">
+
+    <label>Commission (fraction)</label>
+    <input type="number" id="bt-commission" value="0.001" step="0.0001">
+
+    <button type="button" onclick="runBacktest()" id="bt-run-btn">
+      <span class="run-text">▶ Run Backtest</span>
+      <span class="spinner"><span class="spin"></span> Running…</span>
+    </button>
+  </div>
+
+  <!-- ── Results ────────────────────────────────────────────────── -->
+  <div id="bt-results" style="display:none;">
+    <div id="gate-badge"></div>
+
+    <div class="metric-grid" id="metrics-grid"></div>
+
+    <h4 style="margin-bottom:.4rem;">Equity Curve</h4>
+    <div id="equity-chart"></div>
+
+    <div id="approve-bar" style="display:none;margin-bottom:1rem;"></div>
+
+    <h4>Trade Log <span id="trade-count" style="color:var(--muted-color);font-size:.8rem;"></span></h4>
+    <div style="overflow-x:auto;">
+      <table class="trade-table">
+        <thead>
+          <tr><th>Entry</th><th>Exit</th><th>Size</th><th>Entry ₹</th><th>Exit ₹</th><th>P&amp;L ₹</th><th>Return %</th></tr>
+        </thead>
+        <tbody id="trade-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Pre-fill defaults ──────────────────────────────────────────────────────
+(function() {
+  const today = new Date();
+  document.getElementById('bt-to').value = today.toISOString().slice(0,10);
+  const from = new Date(today); from.setDate(from.getDate() - 90);
+  document.getElementById('bt-from').value = from.toISOString().slice(0,10);
+})();
+
+// ── Link saved strategy → auto-fill class + params ────────────────────────
+document.getElementById('bt-strategy-id').addEventListener('change', function() {
+  const opt = this.options[this.selectedIndex];
+  const cls = opt.getAttribute('data-class');
+  const params = opt.getAttribute('data-params');
+  if (cls) {
+    const sel = document.getElementById('bt-class');
+    for (let i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === cls) { sel.selectedIndex = i; break; }
+    }
+  }
+  if (params) document.getElementById('bt-params').value = params;
+});
+
+// ── Custom symbol ──────────────────────────────────────────────────────────
+document.getElementById('bt-symbol').addEventListener('change', function() {
+  document.getElementById('bt-symbol-custom').style.display =
+    this.value === '__custom' ? 'block' : 'none';
+});
+
+// ── Equity chart instance ──────────────────────────────────────────────────
+let _echart = null;
+let _eseries = null;
+
+function _initEquityChart() {
+  const el = document.getElementById('equity-chart');
+  el.innerHTML = '';
+  _echart = LightweightCharts.createChart(el, {
+    width: el.clientWidth, height: 280,
+    layout: { background: { color: '#13151a' }, textColor: '#d1d5db' },
+    grid: { vertLines: { color: '#22262e' }, horzLines: { color: '#22262e' } },
+    rightPriceScale: { borderColor: '#333' },
+    timeScale: { borderColor: '#333', timeVisible: true },
+  });
+  _eseries = _echart.addLineSeries({ color: '#26a69a', lineWidth: 2 });
+}
+
+// ── Run backtest ───────────────────────────────────────────────────────────
+async function runBacktest() {
+  const btn = document.getElementById('bt-run-btn');
+  btn.classList.add('htmx-request');
+
+  const symSel = document.getElementById('bt-symbol');
+  const symbol = symSel.value === '__custom'
+    ? document.getElementById('bt-symbol-custom').value.trim().toUpperCase()
+    : symSel.value;
+
+  let params = null;
+  try {
+    const raw = document.getElementById('bt-params').value.trim();
+    if (raw) params = JSON.parse(raw);
+  } catch(e) { alert('Invalid JSON in params: ' + e.message); btn.classList.remove('htmx-request'); return; }
+
+  const strategyId = document.getElementById('bt-strategy-id').value;
+  const body = {
+    strategy_class:  document.getElementById('bt-class').value,
+    symbol,
+    timeframe:       document.getElementById('bt-tf').value,
+    from_date:       document.getElementById('bt-from').value,
+    to_date:         document.getElementById('bt-to').value,
+    params,
+    cash:            parseFloat(document.getElementById('bt-cash').value),
+    commission:      parseFloat(document.getElementById('bt-commission').value),
+    strategy_id:     strategyId ? parseInt(strategyId) : null,
+  };
+
+  try {
+    const r = await fetch('/backtest/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await r.json();
+    renderResults(data);
+  } catch(e) {
+    alert('Network error: ' + e.message);
+  } finally {
+    btn.classList.remove('htmx-request');
+  }
+}
+
+// ── Render results ─────────────────────────────────────────────────────────
+function renderResults(d) {
+  const box = document.getElementById('bt-results');
+  box.style.display = 'block';
+
+  if (d.error) {
+    box.innerHTML = `<article style="border:1px solid #ef5350;padding:1rem;border-radius:.5rem;color:#ef5350;">
+      <strong>Error:</strong> ${d.error}</article>`;
+    return;
+  }
+
+  // Gate badge
+  const gb = document.getElementById('gate-badge');
+  if (d.passed_gate) {
+    gb.innerHTML = `<div class="gate-badge gate-pass">✓ BACKTEST PASSED — ${d.gate_reason}</div>`;
+  } else {
+    gb.innerHTML = `<div class="gate-badge gate-fail">✗ GATE FAILED — ${d.gate_reason}</div>`;
+  }
+
+  // Metrics
+  const SHARPE_MIN = {{ sharpe_min }};
+  const retCls  = d.return_pct >= 0 ? 'up' : 'down';
+  const shpCls  = d.sharpe >= SHARPE_MIN ? 'up' : 'down';
+  const ddCls   = 'down';
+  const pfCls   = d.profit_factor >= 1 ? 'up' : 'down';
+  document.getElementById('metrics-grid').innerHTML =
+    '<div class="metric-card"><div class="label">Return</div>'
+    + '<div class="value ' + retCls + '">' + (d.return_pct >= 0 ? '+' : '') + d.return_pct + '%</div></div>'
+    + '<div class="metric-card"><div class="label">Sharpe</div>'
+    + '<div class="value ' + shpCls + '">' + d.sharpe + '</div></div>'
+    + '<div class="metric-card"><div class="label">Max DD</div>'
+    + '<div class="value ' + ddCls + '">' + d.max_drawdown_pct + '%</div></div>'
+    + '<div class="metric-card"><div class="label">Win Rate</div>'
+    + '<div class="value neu">' + d.win_rate_pct + '%</div></div>'
+    + '<div class="metric-card"><div class="label">Trades</div>'
+    + '<div class="value neu">' + d.num_trades + '</div></div>'
+    + '<div class="metric-card"><div class="label">Profit Factor</div>'
+    + '<div class="value ' + pfCls + '">' + d.profit_factor + '</div></div>'
+    + '<div class="metric-card"><div class="label">Rows Used</div>'
+    + '<div class="value neu">' + d.rows_used + '</div></div>'
+    + '<div class="metric-card"><div class="label">Period</div>'
+    + '<div class="value neu" style="font-size:.75rem;">' + d.from_date + '<br>' + d.to_date + '</div></div>';
+
+  // Equity curve
+  _initEquityChart();
+  if (d.equity_curve && d.equity_curve.length) {
+    _eseries.setData(d.equity_curve);
+    _echart.timeScale().fitContent();
+  }
+
+  // Approve bar
+  const ab = document.getElementById('approve-bar');
+  if (d.passed_gate && d.strategy_id) {
+    ab.style.display = 'block';
+    ab.innerHTML = `
+      <button onclick="approveStrategy(${d.strategy_id}, ${d.sharpe}, ${d.max_drawdown_pct}, false)"
+        style="margin-right:.5rem;" class="outline">✓ Mark tested only</button>
+      <button onclick="approveStrategy(${d.strategy_id}, ${d.sharpe}, ${d.max_drawdown_pct}, true)">
+        ✓ Mark tested &amp; Enable strategy</button>`;
+  } else {
+    ab.style.display = 'none';
+  }
+
+  // Trade log
+  document.getElementById('trade-count').textContent = `(${d.trades.length} shown)`;
+  const tbody = document.getElementById('trade-tbody');
+  tbody.innerHTML = d.trades.map(t => {
+    const pnlCls = t.pnl >= 0 ? 'up' : 'down';
+    const retCls2 = t.return_pct >= 0 ? 'up' : 'down';
+    return `<tr>
+      <td>${t.entry_time}</td><td>${t.exit_time}</td><td>${t.size}</td>
+      <td>${t.entry_price}</td><td>${t.exit_price}</td>
+      <td class="${pnlCls}">${t.pnl >= 0 ? '+' : ''}${t.pnl}</td>
+      <td class="${retCls2}">${t.return_pct >= 0 ? '+' : ''}${t.return_pct}%</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Approve strategy ───────────────────────────────────────────────────────
+async function approveStrategy(id, sharpe, dd, autoEnable) {
+  const r = await fetch(`/strategies/${id}/approve-backtest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ auto_enable: autoEnable }),
+  });
+  const data = await r.json();
+  if (r.ok) {
+    const msg = autoEnable
+      ? `✓ Strategy "${data.name}" marked as tested and ENABLED.`
+      : `✓ Strategy "${data.name}" marked as backtest passed.`;
+    document.getElementById('approve-bar').innerHTML =
+      `<div style="color:#26a69a;padding:.5rem 0;">${msg}
+        <a href="/strategies" style="margin-left:1rem;">→ View Strategies</a></div>`;
+  } else {
+    alert('Approval failed: ' + (data.detail || JSON.stringify(data)));
+  }
+}
+
+window.addEventListener('resize', () => {
+  if (_echart) _echart.applyOptions({ width: document.getElementById('equity-chart').clientWidth });
+});
+</script>
 {% endblock %}
