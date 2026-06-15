@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     upstox_api_secret: str = ""
     upstox_redirect_uri: str = "http://localhost:8000/auth/callback"
 
+    # Optional — enables headless TOTP auto-login at 08:30 IST each trading day.
+    # Get the TOTP secret from the Upstox 2FA setup screen (base32 string).
+    upstox_mobile: str = ""       # 10-digit registered mobile number
+    upstox_pin: str = ""          # 6-digit Upstox trading PIN
+    upstox_totp_secret: str = ""  # base32 TOTP secret (e.g. JBSWY3DPEHPK3PXP…)
+
     deepseek_api_key: str = ""
     newsapi_key: str = ""
 
