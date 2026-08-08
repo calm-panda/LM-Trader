@@ -6,16 +6,128 @@
 <div class="grid">
   <article>
     <header>Paper Portfolio</header>
-    <p>Cash: —</p>
-    <p>Total Value: —</p>
-    <p>Day P&amp;L: —</p>
+    <p>Cash: <strong>₹{{ "%.2f"|format(paper.cash) }}</strong></p>
+    <p>Total Value: <strong>₹{{ "%.2f"|format(paper.total_value) }}</strong></p>
+    <p>Day P&amp;L: <strong>₹{{ "%.2f"|format(paper.day_pnl) }}</strong></p>
+    <p>Realised: ₹{{ "%.2f"|format(paper.realised_pnl) }} · Unrealised: ₹{{ "%.2f"|format(paper.unrealised_pnl) }}</p>
+    <p>Open positions: {{ paper.open_positions }}</p>
+    {% if paper.positions %}
+    <table>
+      <thead>
+        <tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>LTP</th><th>P&amp;L</th></tr>
+      </thead>
+      <tbody>
+        {% for p in paper.positions %}
+        <tr>
+          <td>{{ p.symbol }}</td>
+          <td>{{ p.qty }}</td>
+          <td>₹{{ "%.2f"|format(p.avg_price) }}</td>
+          <td>₹{{ "%.2f"|format(p.ltp) }}</td>
+          <td>₹{{ "%.2f"|format(p.pnl) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
   </article>
+
   <article>
     <header>Live Portfolio</header>
-    <p><em>Connect Upstox to sync live holdings.</em></p>
+    {% if not live.enabled %}
+      <p><em>Live trading disabled. Set <code>LIVE_TRADING_ENABLED=true</code> in <code>.env</code> to sync Upstox holdings.</em></p>
+    {% elif live.error %}
+      <p class="badge warning">{{ live.error }}</p>
+    {% else %}
+      <p>Available cash: <strong>₹{{ "%.2f"|format(live.funds or 0) }}</strong></p>
+
+      <h3>Positions</h3>
+      {% if live.positions %}
+      <table>
+        <thead>
+          <tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>LTP</th><th>P&amp;L</th></tr>
+        </thead>
+        <tbody>
+          {% for p in live.positions %}
+          <tr>
+            <td>{{ p.trading_symbol or p.tradingsymbol or p.instrument_token }}</td>
+            <td>{{ p.quantity or p.net_quantity }}</td>
+            <td>₹{{ p.average_price or p.buy_price or '—' }}</td>
+            <td>₹{{ p.last_price or p.ltp or '—' }}</td>
+            <td>₹{{ p.pnl or p.unrealised or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p><em>No open live positions.</em></p>
+      {% endif %}
+
+      <h3>Holdings</h3>
+      {% if live.holdings %}
+      <table>
+        <thead>
+          <tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>LTP</th><th>P&amp;L</th></tr>
+        </thead>
+        <tbody>
+          {% for h in live.holdings %}
+          <tr>
+            <td>{{ h.trading_symbol or h.tradingsymbol or h.isin }}</td>
+            <td>{{ h.quantity }}</td>
+            <td>₹{{ h.average_price or '—' }}</td>
+            <td>₹{{ h.last_price or h.ltp or '—' }}</td>
+            <td>₹{{ h.pnl or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p><em>No holdings.</em></p>
+      {% endif %}
+    {% endif %}
   </article>
 </div>
 
-<h2>Trade History</h2>
+<h2>Trade Journal</h2>
+{% if journal %}
+<table>
+  <thead>
+    <tr>
+      <th>Opened</th>
+      <th>Mode</th>
+      <th>Symbol</th>
+      <th>Side</th>
+      <th>Qty</th>
+      <th>Entry</th>
+      <th>Exit</th>
+      <th>P&amp;L</th>
+      <th>Status</th>
+      <th>AI</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in journal %}
+    <tr>
+      <td><small>{{ t.opened_at }}</small></td>
+      <td><span class="badge">{{ t.mode }}</span></td>
+      <td><strong>{{ t.symbol }}</strong></td>
+      <td>{{ t.side }}</td>
+      <td>{{ t.quantity }}</td>
+      <td>₹{{ "%.2f"|format(t.entry_price) }}</td>
+      <td>{% if t.exit_price %}₹{{ "%.2f"|format(t.exit_price) }}{% else %}—{% endif %}</td>
+      <td>{% if t.pnl is not none %}₹{{ "%.2f"|format(t.pnl) }}{% else %}—{% endif %}</td>
+      <td>{{ t.status }}</td>
+      <td>
+        {% if t.signal_confidence is not none %}
+        <small>{{ "%.0f"|format(t.signal_confidence * 100) }}% — {{ (t.signal_reasoning or '')[:80] }}{% if t.signal_reasoning and t.signal_reasoning|length > 80 %}…{% endif %}</small>
+        {% else %}
+        —
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
 <p><em>No trades yet.</em></p>
+{% endif %}
 {% endblock %}
