@@ -13,28 +13,31 @@ todos:
     status: completed
   - id: data-pipeline
     content: Build OHLCV historical data fetch + Upstox WebSocket live tick feed with in-memory tick store
-    status: pending
+    status: completed
   - id: chart-ui
     content: Build chart dashboard (Jinja + HTMX + Lightweight Charts) with indicator overlays
-    status: pending
+    status: completed
   - id: paper-engine
     content: Build paper trading engine — simulates order fills from live tick feed, tracks paper P&L
-    status: pending
+    status: completed
   - id: strategy-engine
     content: Build strategy base class + APScheduler live runner, wired to paper engine initially
-    status: pending
+    status: completed
   - id: backtester
     content: Integrate backtesting.py for historical strategy validation before paper/live deployment
-    status: pending
+    status: completed
   - id: deepseek-integration
     content: "Integrate DeepSeek API: chart analysis prompts, strategy generation from plain English, news sentiment"
-    status: pending
+    status: completed
   - id: portfolio-tracker
     content: Portfolio dashboard — paper P&L, live holdings sync from Upstox, risk metrics
-    status: pending
+    status: completed
+  - id: ai-signal-gate
+    content: "AI signal confirmation gate: structured DeepSeek recommendations, Confirm/Reject, live Upstox orders"
+    status: completed
   - id: live-graduation
     content: Add live order routing toggle (paper → live), with mandatory risk gate checks before enabling
-    status: pending
+    status: completed
   - id: harden-deploy
     content: systemd service, nginx reverse proxy, auto-restart, market-hours scheduling, alerting
     status: pending
@@ -42,6 +45,14 @@ isProject: false
 ---
 
 # AI-Assisted Trading App — Raspberry Pi (Revised)
+
+## Phase 2 note (hybrid execution — resolved)
+
+Automated paper trading from the original plan stays as-is for practice. Live Upstox
+orders are **human-gated**: DeepSeek emits structured recommendations to `/signals`;
+you must tap Confirm before `app/services/upstox/orders.py` places anything. See
+`.cursor/overhead_plan.md` for the confirmation-gate design (use DeepSeek wherever
+that doc mentions Claude).
 
 ## Confirmed Decisions
 

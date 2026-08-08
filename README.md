@@ -1,6 +1,8 @@
 # LM Trader
 
-AI-assisted NSE/BSE trading app for Raspberry Pi — Upstox API, DeepSeek AI, HTMX + Jinja2 UI, paper-first automated trading.
+AI-assisted NSE/BSE trading app for Raspberry Pi — Upstox API, DeepSeek AI, HTMX + Jinja2 UI.
+
+**Hybrid model:** automated paper trading for practice; live Upstox orders only after you Confirm an AI signal.
 
 ## Quick Start (Development)
 
@@ -22,9 +24,9 @@ app/
 ├── main.py              # FastAPI entry point
 ├── config.py            # Settings from .env
 ├── database.py          # SQLAlchemy + aiosqlite
-├── models/              # SQLite schema (trades, portfolio, OHLCV, strategies, paper_orders)
-├── routers/             # HTTP routes (dashboard, chart, auth, …)
-├── services/            # Business logic (Upstox, tick store, …)
+├── models/              # SQLite schema (OHLCV, strategies, paper_orders, signals, trades, …)
+├── routers/             # HTTP routes (dashboard, chart, signals, auth, …)
+├── services/            # Business logic (Upstox, DeepSeek, paper engine, scheduler, …)
 └── templates/           # Jinja2 + HTMX pages
 static/css/              # Minimal custom styles
 data/                    # SQLite database (created at runtime)
@@ -40,22 +42,26 @@ Copy `.env.example` to `.env` and set:
 | `UPSTOX_API_SECRET` | App secret |
 | `UPSTOX_REDIRECT_URI` | Must match app config, e.g. `http://localhost:8000/auth/callback` |
 | `DEEPSEEK_API_KEY` | From [platform.deepseek.com](https://platform.deepseek.com) |
-| `LIVE_TRADING_ENABLED` | `false` by default — paper mode only |
+| `LIVE_TRADING_ENABLED` | `false` by default — Confirm still required for every live order |
+| `SIGNAL_VALIDITY_MINUTES` | How long a pending AI signal stays confirmable (default 15) |
+| `SIGNAL_GENERATION_INTERVAL_MINUTES` | Watchlist scan interval (default 5) |
+| `SIGNAL_CONFIDENCE_THRESHOLD` | Discard AI signals below this confidence (default 0.55) |
 
 ## Build Progress
 
-See `.cursor/base_plan.md` for the full architecture and remaining tasks.
+See `.cursor/base_plan.md` for the original architecture and `.cursor/overhead_plan.md` for the human-in-the-loop Phase 2 design.
 
 - [x] Project scaffold (FastAPI + Jinja2 + SQLite)
 - [x] Upstox OAuth2 login flow + token storage
-- [ ] Data pipeline (OHLCV + WebSocket ticks)
-- [ ] Chart UI with Lightweight Charts
-- [ ] Paper trading engine
-- [ ] Strategy engine + APScheduler
-- [ ] Backtester integration
-- [ ] DeepSeek AI integration
-- [ ] Portfolio dashboard
-- [ ] Live trading graduation + deployment hardening
+- [x] Data pipeline (OHLCV + WebSocket ticks)
+- [x] Chart UI with Lightweight Charts
+- [x] Paper trading engine
+- [x] Strategy engine + APScheduler
+- [x] Backtester integration
+- [x] DeepSeek AI integration
+- [x] AI signal confirmation gate (structured recommendations → Confirm/Reject → live order)
+- [x] Portfolio dashboard (paper + live sync + trade journal)
+- [ ] systemd unit + remaining deployment hardening / alerting
 
 ## Raspberry Pi Deployment
 
