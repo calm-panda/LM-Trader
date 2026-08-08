@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>AI Signals</h1>
+
+<p>
+  DeepSeek recommendations require your <strong>Confirm</strong> before any live order.
+  Automated paper strategies are separate and unaffected.
+  {% if not live_trading_enabled %}
+  <span class="badge warning">Live trading disabled</span>
+  {% else %}
+  <span class="badge danger">Live trading ENABLED</span>
+  {% endif %}
+  <small>Signals expire after {{ signal_validity_minutes }} minutes.</small>
+</p>
+
+<h2>Pending</h2>
+<div id="pending-signals" class="signal-grid">
+  {% if pending %}
+    {% for sig in pending %}
+      {% with done=False, message='' %}
+      {% include "partials/signal_card.html" %}
+      {% endwith %}
+    {% endfor %}
+  {% else %}
+    <p id="no-pending"><em>No pending signals. The scanner runs every few minutes during market hours.</em></p>
+  {% endif %}
+</div>
+
+<h2>Recent History</h2>
+{% if history %}
+<table>
+  <thead>
+    <tr>
+      <th>When</th>
+      <th>Symbol</th>
+      <th>Dir</th>
+      <th>Entry</th>
+      <th>Conf</th>
+      <th>Status</th>
+      <th>Reasoning</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for sig in history %}
+    <tr>
+      <td><small>{{ sig.generated_at }}</small></td>
+      <td><strong>{{ sig.symbol }}</strong></td>
+      <td>
+        <span class="badge {% if sig.direction == 'BUY' %}success{% else %}danger{% endif %}">
+          {{ sig.direction }}
+        </span>
+      </td>
+      <td>₹{{ "%.2f"|format(sig.entry) }}</td>
+      <td>{{ "%.0f"|format(sig.confidence * 100) }}%</td>
+      <td><span class="badge">{{ sig.status }}</span></td>
+      <td><small>{{ sig.reasoning[:120] }}{% if sig.reasoning|length > 120 %}…{% endif %}</small></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p><em>No signal history yet.</em></p>
+{% endif %}
+{% endblock %}

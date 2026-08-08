@@ -25,3 +25,38 @@
 #chart-container {
   margin-top: 1rem;
 }
+
+.signal-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.signal-card header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.signal-card.buy {
+  border-left: 4px solid #2ecc71;
+}
+
+.signal-card.sell {
+  border-left: 4px solid #e74c3c;
+}
+
+.signal-levels {
+  margin: 0.75rem 0;
+}
+
+.signal-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+ul.triggered {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}

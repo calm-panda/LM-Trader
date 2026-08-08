@@ -8,7 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
 from app.database import async_session, init_db
-from app.routers import ai, auth, backtest, chart, dashboard, portfolio, settings, strategies
+from app.routers import ai, auth, backtest, chart, dashboard, portfolio, settings, signals, strategies
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(chart.router)
     app.include_router(strategies.router)
     app.include_router(backtest.router)
+    app.include_router(signals.router)
     app.include_router(portfolio.router)
     app.include_router(ai.router)
     app.include_router(settings.router)

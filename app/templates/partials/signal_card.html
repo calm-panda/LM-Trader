@@ -1,0 +1,56 @@
+<article id="signal-card-{{ sig.id }}" class="signal-card {% if sig.direction == 'BUY' %}buy{% else %}sell{% endif %}">
+  <header>
+    <strong>{{ sig.symbol }}</strong>
+    <span class="badge {% if sig.direction == 'BUY' %}success{% else %}danger{% endif %}">
+      {{ sig.direction }}
+    </span>
+    <span class="badge">{{ "%.0f"|format(sig.confidence * 100) }}% conf</span>
+    <span class="badge">{{ sig.timeframe }}</span>
+    {% if done|default(false) %}
+    <span class="badge {% if sig.status == 'confirmed' %}success{% else %}warning{% endif %}">{{ sig.status }}</span>
+    {% endif %}
+  </header>
+
+  <div class="grid signal-levels">
+    <div><small>Entry</small><br><strong>₹{{ "%.2f"|format(sig.entry) }}</strong></div>
+    <div><small>Stop</small><br><strong>₹{{ "%.2f"|format(sig.stop_loss) }}</strong></div>
+    <div><small>Target</small><br><strong>₹{{ "%.2f"|format(sig.target) }}</strong></div>
+    <div><small>R:R</small><br><strong>{{ "%.2f"|format(sig.risk_reward_ratio) }}</strong></div>
+  </div>
+
+  {% if sig.indicators_triggered %}
+  <ul class="triggered">
+    {% for t in sig.indicators_triggered %}
+    <li>{{ t }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <p>{{ sig.reasoning }}</p>
+  <p><small><strong>Invalidation:</strong> {{ sig.invalidation }}</small></p>
+  <p><small>Expires {{ sig.expires_at }} · {{ sig.model_used }}</small></p>
+
+  {% if done|default(false) %}
+  <p class="badge success">{{ message|default('') }}</p>
+  {% elif sig.status == 'pending' %}
+  <div class="signal-actions">
+    <button
+      class="contrast"
+      hx-post="/signals/{{ sig.id }}/confirm"
+      hx-target="#signal-card-{{ sig.id }}"
+      hx-swap="outerHTML"
+      {% if not live_trading_enabled %}disabled title="Enable LIVE_TRADING_ENABLED in .env"{% endif %}
+    >
+      Confirm (live)
+    </button>
+    <button
+      class="outline"
+      hx-post="/signals/{{ sig.id }}/reject"
+      hx-target="#signal-card-{{ sig.id }}"
+      hx-swap="outerHTML"
+    >
+      Reject
+    </button>
+  </div>
+  {% endif %}
+</article>
