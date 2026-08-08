@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     # Override in .env: WATCHLIST=RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK
     watchlist: str = "RELIANCE,TCS,INFY,HDFCBANK,ICICIBANK,SBIN,WIPRO,AXISBANK,KOTAKBANK,LT"
 
+    # AI signal confirmation gate
+    signal_validity_minutes: int = 15
+    signal_generation_interval_minutes: int = 5
+    signal_confidence_threshold: float = 0.55
+
     @property
     def watchlist_symbols(self) -> list[str]:
         return [s.strip().upper() for s in self.watchlist.split(",") if s.strip()]

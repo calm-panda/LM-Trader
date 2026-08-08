@@ -15,6 +15,8 @@ class Trade(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     mode: Mapped[str] = mapped_column(String(8), nullable=False)  # paper | live
     strategy_id: Mapped[Optional[int]] = mapped_column(Integer)
+    signal_id: Mapped[Optional[int]] = mapped_column(Integer)
+    upstox_order_id: Mapped[Optional[str]] = mapped_column(String(64))
     symbol: Mapped[str] = mapped_column(String(32), nullable=False)
     side: Mapped[str] = mapped_column(String(8), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
