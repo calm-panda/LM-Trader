@@ -29,16 +29,33 @@
   </fieldset>
 
   <fieldset>
+    <legend>AI Signal Gate</legend>
+    <label>
+      Signal validity (minutes)
+      <input type="number" value="{{ signal_validity_minutes }}" readonly>
+    </label>
+    <label>
+      Generation interval (minutes)
+      <input type="number" value="{{ signal_generation_interval_minutes }}" readonly>
+    </label>
+    <label>
+      Confidence threshold (0–1)
+      <input type="number" step="0.01" value="{{ signal_confidence_threshold }}" readonly>
+    </label>
+    <p><small>Override via <code>SIGNAL_VALIDITY_MINUTES</code>, <code>SIGNAL_GENERATION_INTERVAL_MINUTES</code>, <code>SIGNAL_CONFIDENCE_THRESHOLD</code> in <code>.env</code>.</small></p>
+  </fieldset>
+
+  <fieldset>
     <legend>Live Trading</legend>
     <p>
       Status:
       {% if live_trading_enabled %}
       <span class="badge danger">ENABLED — requires server restart to disable</span>
       {% else %}
-      <span class="badge">Disabled (paper mode)</span>
+      <span class="badge">Disabled (paper mode + AI confirm-gate for live)</span>
       {% endif %}
     </p>
-    <p><small>Enable live trading by setting <code>LIVE_TRADING_ENABLED=true</code> in <code>.env</code> and restarting.</small></p>
+    <p><small>Enable live trading by setting <code>LIVE_TRADING_ENABLED=true</code> in <code>.env</code> and restarting. Live orders still require Confirm on each AI signal.</small></p>
   </fieldset>
 </form>
 {% endblock %}

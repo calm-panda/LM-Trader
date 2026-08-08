@@ -21,5 +21,8 @@ async def settings_page(request: Request):
             "max_capital_per_trade_pct": settings.max_capital_per_trade_pct,
             "max_open_positions": settings.max_open_positions,
             "daily_loss_limit_pct": settings.daily_loss_limit_pct,
+            "signal_validity_minutes": settings.signal_validity_minutes,
+            "signal_generation_interval_minutes": settings.signal_generation_interval_minutes,
+            "signal_confidence_threshold": settings.signal_confidence_threshold,
         },
     )
