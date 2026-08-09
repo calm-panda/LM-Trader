@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,26 +9,75 @@
   <link rel="stylesheet" href="/static/css/app.css">
   {% block head %}{% endblock %}
 </head>
-<body>
-  <nav class="container-fluid">
-    <ul>
-      <li><strong><a href="/dashboard">LM Trader</a></strong></li>
-    </ul>
-    <ul>
-      <li><a href="/dashboard">Dashboard</a></li>
-      <li><a href="/chart/RELIANCE">Charts</a></li>
-      <li><a href="/strategies">Strategies</a></li>
-      <li><a href="/signals">Signals</a></li>
-      <li><a href="/backtest">Backtest</a></li>
-      <li><a href="/portfolio">Portfolio</a></li>
-      <li><a href="/ai/chat">AI</a></li>
-      <li><a href="/settings">Settings</a></li>
-      <li><a href="/auth/login" role="button" class="outline">Upstox Login</a></li>
-    </ul>
+<body class="app-body">
+  {% set path = request.url.path %}
+
+  <aside class="sidebar" aria-label="Primary">
+    <div class="sidebar-brand">
+      <a href="/dashboard">LM Trader</a>
+      {% if live_trading_enabled|default(false) %}
+      <span class="mode-badge live" title="Live trading enabled — Confirm still required">LIVE</span>
+      {% else %}
+      <span class="mode-badge paper" title="Paper mode — strategies auto-fill simulated orders">PAPER</span>
+      {% endif %}
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/dashboard" class="{% if path.startswith('/dashboard') or path == '/' %}active{% endif %}">Dashboard</a>
+      <a href="/signals" class="{% if path.startswith('/signals') %}active{% endif %}">Signals</a>
+      <a href="/chart/{{ (watchlist|default(['RELIANCE']))[0] }}" class="{% if path.startswith('/chart') %}active{% endif %}">Chart</a>
+      <a href="/strategies" class="{% if path.startswith('/strategies') %}active{% endif %}">Strategies</a>
+      <a href="/backtest" class="{% if path.startswith('/backtest') %}active{% endif %}">Backtest</a>
+      <a href="/portfolio" class="{% if path.startswith('/portfolio') %}active{% endif %}">Portfolio</a>
+      <a href="/ai/chat" class="{% if path.startswith('/ai') %}active{% endif %}">AI Chat</a>
+      <a href="/settings" class="{% if path.startswith('/settings') %}active{% endif %}">Settings</a>
+    </nav>
+    <div class="sidebar-foot">
+      <a href="/auth/login" class="btn-login outline">Upstox Login</a>
+    </div>
+  </aside>
+
+  <div class="app-main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title">{% block page_title %}{{ title | default("LM Trader") }}{% endblock %}</h1>
+      </div>
+      <div class="topbar-right">
+        {% if live_trading_enabled|default(false) %}
+        <span class="mode-badge live mobile-mode">LIVE</span>
+        {% else %}
+        <span class="mode-badge paper mobile-mode">PAPER</span>
+        {% endif %}
+      </div>
+    </header>
+
+    <div id="risk-banner-slot"
+         hx-get="/partials/risk-banner"
+         hx-trigger="load, every 60s"
+         hx-swap="innerHTML"></div>
+
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <nav class="mobile-tabs" aria-label="Mobile">
+    <a href="/dashboard" class="{% if path.startswith('/dashboard') or path == '/' %}active{% endif %}">
+      <span class="tab-label">Home</span>
+    </a>
+    <a href="/signals" class="{% if path.startswith('/signals') %}active{% endif %}">
+      <span class="tab-label">Signals</span>
+    </a>
+    <a href="/chart/{{ (watchlist|default(['RELIANCE']))[0] }}" class="{% if path.startswith('/chart') %}active{% endif %}">
+      <span class="tab-label">Chart</span>
+    </a>
+    <a href="/portfolio" class="{% if path.startswith('/portfolio') %}active{% endif %}">
+      <span class="tab-label">Portfolio</span>
+    </a>
+    <a href="/more" class="{% if path.startswith('/settings') or path.startswith('/strategies') or path.startswith('/backtest') or path.startswith('/ai') or path.startswith('/more') %}active{% endif %}">
+      <span class="tab-label">More</span>
+    </a>
   </nav>
-  <main class="container">
-    {% block content %}{% endblock %}
-  </main>
+
   {% block scripts %}{% endblock %}
 </body>
 </html>

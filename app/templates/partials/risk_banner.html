@@ -1,0 +1,15 @@
+{% if risk.show %}
+<div class="risk-banner {% if risk.loss_used_pct >= 95 %}critical{% endif %}" role="status">
+  {% if risk.loss_used_pct >= 80 %}
+  Daily loss limit {{ "%.0f"|format(risk.loss_used_pct) }}% used
+  (day P&amp;L {{ "%+.2f"|format(risk.day_pnl_pct) }}% · limit −{{ risk.daily_loss_limit_pct }}%).
+  {% endif %}
+  {% if risk.approaching_squareoff and risk.mins_to_squareoff is not none %}
+  Auto square-off in {{ risk.mins_to_squareoff }} min (15:15 IST)
+  {% if risk.open_positions %} · {{ risk.open_positions }} open position(s){% endif %}.
+  {% endif %}
+  <div class="risk-meter {% if risk.loss_used_pct >= 95 %}critical{% endif %}">
+    <span style="width: {{ [risk.loss_used_pct, 100]|min }}%"></span>
+  </div>
+</div>
+{% endif %}
