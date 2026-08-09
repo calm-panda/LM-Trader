@@ -1,13 +1,12 @@
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.services.chart import VALID_TIMEFRAMES, _is_market_open, get_available_symbols, get_chart_data
+from app.templating import templates, ui_context
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
 
 
 # NOTE: /chart/data and /chart/ltp/{symbol} must be declared BEFORE /chart/{symbol}
@@ -66,12 +65,12 @@ async def chart_page(
     return templates.TemplateResponse(
         request,
         "chart.html",
-        {
-            "title": f"{symbol} — Chart",
-            "symbol": symbol,
-            "timeframe": tf,
-            "symbols": symbols,
-            "valid_timeframes": sorted(VALID_TIMEFRAMES),
-            "market_open": _is_market_open(),
-        },
+        ui_context(
+            title=f"{symbol} — Chart",
+            symbol=symbol,
+            timeframe=tf,
+            symbols=symbols,
+            valid_timeframes=sorted(VALID_TIMEFRAMES),
+            market_open=_is_market_open(),
+        ),
     )

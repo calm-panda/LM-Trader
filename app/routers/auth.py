@@ -2,14 +2,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.services.upstox.auth import UpstoxAuthService
+from app.templating import templates, ui_context
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-templates = Jinja2Templates(directory="app/templates")
 
 # In-memory OAuth state store (single-user Pi deployment)
 _oauth_states: set[str] = set()
@@ -41,7 +40,7 @@ async def callback(
         return templates.TemplateResponse(
             request,
             "auth_error.html",
-            {"title": "Auth Error", "error": error},
+            ui_context(title="Auth Error", error=error),
             status_code=400,
         )
 
@@ -59,7 +58,7 @@ async def callback(
         return templates.TemplateResponse(
             request,
             "auth_error.html",
-            {"title": "Auth Error", "error": str(exc)},
+            ui_context(title="Auth Error", error=str(exc)),
             status_code=400,
         )
 
@@ -67,10 +66,10 @@ async def callback(
     return templates.TemplateResponse(
         request,
         "auth_success.html",
-        {
-            "title": "Connected",
-            "user_name": token.user_name or "User",
-        },
+        ui_context(
+            title="Connected",
+            user_name=token.user_name or "User",
+        ),
     )
 
 

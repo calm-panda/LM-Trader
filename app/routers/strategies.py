@@ -8,7 +8,6 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -18,10 +17,10 @@ from app.models.strategy import Strategy
 from app.services.paper_engine import paper_engine
 from app.services.strategies import DEFAULT_STRATEGIES, REGISTRY
 from app.services.tick_store import tick_store
+from app.templating import templates, ui_context
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
 
 
 # ── Helper ─────────────────────────────────────────────────────────────────────
@@ -63,12 +62,12 @@ async def strategies_page(request: Request):
     return templates.TemplateResponse(
         request,
         "strategies.html",
-        {
-            "title": "Strategies",
-            "strategies": strats,
-            "snap": snap,
-            "registry_names": list(REGISTRY.keys()),
-        },
+        ui_context(
+            title="Strategies",
+            strategies=strats,
+            snap=snap,
+            registry_names=list(REGISTRY.keys()),
+        ),
     )
 
 

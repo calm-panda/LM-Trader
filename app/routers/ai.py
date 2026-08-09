@@ -6,12 +6,12 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+
+from app.templating import templates, ui_context
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
 
 
 # ── Page ───────────────────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ async def ai_chat_page(request: Request):
     return templates.TemplateResponse(
         request,
         "ai_chat.html",
-        {"title": "AI Assistant", "symbols": symbols},
+        ui_context(title="AI Chat", symbols=symbols),
     )
 
 

@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -15,9 +14,9 @@ from app.database import async_session
 from app.models.strategy import Strategy
 from app.services.backtest_runner import SHARPE_MIN, MAX_DRAWDOWN_PCT, run_backtest
 from app.services.strategies import REGISTRY
+from app.templating import templates, ui_context
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
 
 
 # ── Page ───────────────────────────────────────────────────────────────────────
@@ -35,14 +34,14 @@ async def backtest_page(request: Request):
     return templates.TemplateResponse(
         request,
         "backtest.html",
-        {
-            "title":        "Backtest",
-            "strategies":   strategies,
-            "symbols":      symbols,
-            "registry":     list(REGISTRY.keys()),
-            "sharpe_min":   SHARPE_MIN,
-            "max_dd":       MAX_DRAWDOWN_PCT,
-        },
+        ui_context(
+            title="Backtest",
+            strategies=strategies,
+            symbols=symbols,
+            registry=list(REGISTRY.keys()),
+            sharpe_min=SHARPE_MIN,
+            max_dd=MAX_DRAWDOWN_PCT,
+        ),
     )
 
 
