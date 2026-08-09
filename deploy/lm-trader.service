@@ -1,0 +1,26 @@
+[Unit]
+Description=LM Trader — AI-assisted NSE trading app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=panda
+Group=panda
+WorkingDirectory=/home/panda/LM-Trader
+Environment=PATH=/home/panda/LM-Trader/.venv/bin:/usr/bin
+EnvironmentFile=-/home/panda/LM-Trader/.env
+ExecStart=/home/panda/LM-Trader/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging → journald (also mirrored to data/alerts.log by the app)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lm-trader
+
+[Install]
+WantedBy=multi-user.target

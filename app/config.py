@@ -23,7 +23,13 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./data/trading.db"
     paper_starting_capital: float = 100_000.0
     live_trading_enabled: bool = False
+    # When False (default): live EOD is notify-only — HITL compliant.
+    # When True: force-close live MIS at 15:15 without Confirm (safety exception).
+    live_auto_squareoff: bool = False
     secret_key: str = "change-me-in-production"
+
+    # Optional webhook for critical alerts (Slack/Discord/generic JSON POST).
+    alert_webhook_url: str = ""
 
     # Risk defaults
     max_capital_per_trade_pct: float = 10.0

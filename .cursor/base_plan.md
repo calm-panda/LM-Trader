@@ -40,7 +40,7 @@ todos:
     status: completed
   - id: harden-deploy
     content: systemd service, nginx reverse proxy, auto-restart, market-hours scheduling, alerting
-    status: pending
+    status: completed
 isProject: false
 ---
 

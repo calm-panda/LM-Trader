@@ -60,8 +60,9 @@ See `.cursor/base_plan.md` for the original architecture and `.cursor/overhead_p
 - [x] Backtester integration
 - [x] DeepSeek AI integration
 - [x] AI signal confirmation gate (structured recommendations → Confirm/Reject → live order)
-- [x] Portfolio dashboard (paper + live sync + trade journal)
-- [ ] systemd unit + remaining deployment hardening / alerting
+- [x] Portfolio dashboard (paper + live sync + trade journal + win-rate / R:R analytics)
+- [x] systemd unit + alerting (`data/alerts.log` + optional webhook)
+- [x] Live EOD HITL default (notify-only; opt-in `LIVE_AUTO_SQUAREOFF`)
 
 ## Raspberry Pi Deployment
 
@@ -73,3 +74,12 @@ pip install -r requirements.txt
 ```
 
 Set `UPSTOX_REDIRECT_URI=http://<pi-ip>:8000/auth/callback` in `.env`.
+
+### systemd (production)
+
+```bash
+sudo bash scripts/setup_systemd.sh
+systemctl status lm-trader
+journalctl -u lm-trader -f
+# Alerts also land in data/alerts.log (optional ALERT_WEBHOOK_URL)
+```

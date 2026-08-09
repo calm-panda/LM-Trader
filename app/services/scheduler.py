@@ -141,6 +141,12 @@ async def token_refresh() -> None:
             "If the current token expires before 09:15, strategies will halt.  "
             "Log in manually at /auth/login"
         )
+        from app.services.alerts import send_alert
+        await send_alert(
+            "Upstox token refresh failed",
+            "Auto-login skipped or failed. Log in at /auth/login before market open.",
+            level="CRITICAL",
+        )
         return
 
     # Restart the WebSocket feed with the new token
@@ -242,12 +248,24 @@ async def pre_market_check() -> None:
             "pre_market_check: NO ACCESS TOKEN in DB — "
             "strategies will produce no signals.  Login at /auth/login"
         )
+        from app.services.alerts import send_alert
+        await send_alert(
+            "No Upstox access token",
+            "pre_market_check found no token. Login at /auth/login.",
+            level="CRITICAL",
+        )
         return
 
     if _as_utc(token_row.expires_at) < _utc_now():
         logger.critical(
             "pre_market_check: Access token EXPIRED — "
             "strategies halted.  Login at /auth/login"
+        )
+        from app.services.alerts import send_alert
+        await send_alert(
+            "Upstox access token expired",
+            "pre_market_check: token expired. Login at /auth/login.",
+            level="CRITICAL",
         )
         return
 
@@ -405,23 +423,39 @@ async def generate_signals() -> None:
 # ── Every 1 min — Expire stale pending signals ───────────────────────────────
 
 async def expire_signals() -> None:
-    """Flip pending signals past expires_at to expired."""
+    """Flip pending signals past expires_at to expired and journal them."""
     now = datetime.now(timezone.utc)
     async with async_session() as db:
-        result = await db.execute(
+        pending = await db.execute(
+            select(SignalRow).where(
+                SignalRow.status == "pending", SignalRow.expires_at <= now
+            )
+        )
+        rows = list(pending.scalars())
+        ids = [r.id for r in rows]
+        if not ids:
+            return
+        await db.execute(
             update(SignalRow)
-            .where(SignalRow.status == "pending", SignalRow.expires_at <= now)
+            .where(SignalRow.id.in_(ids))
             .values(status="expired")
         )
         await db.commit()
-        if result.rowcount:
-            logger.info("expire_signals: expired %d signal(s)", result.rowcount)
+
+    from app.services.journal import record_expired_signals
+    n = await record_expired_signals(ids)
+    logger.info("expire_signals: expired %d signal(s), journaled %d", len(ids), n)
 
 
 # ── 15:15 — EOD auto square-off ──────────────────────────────────────────────
 
 async def auto_squareoff() -> None:
-    """Close all open paper (+ live) positions at 15:15 IST (NSE intraday cutoff)."""
+    """Close paper positions at 15:15 IST; live is notify-only unless opt-in.
+
+    Paper always auto-squares (practice sandbox).
+    Live defaults to HITL: alert only listing open positions.
+    Set LIVE_AUTO_SQUAREOFF=true to force-close live MIS without Confirm.
+    """
     logger.info("=== EOD auto square-off at 15:15 IST ===")
     snap_before = paper_engine.snapshot()
     logger.info("Positions before square-off: %d", snap_before["open_positions"])
@@ -436,16 +470,24 @@ async def auto_squareoff() -> None:
     if not cfg.live_trading_enabled:
         return
 
+    from app.services.alerts import send_alert
+
     token = await _latest_access_token()
     if not token:
-        logger.warning("auto_squareoff: live enabled but no token — skip live close")
+        await send_alert(
+            "Live EOD square-off skipped — no token",
+            "LIVE_TRADING_ENABLED but no access token; cannot inspect live positions.",
+            level="CRITICAL",
+        )
         return
 
     try:
         from app.services.upstox.instruments import get_instrument_key
         from app.services.upstox.orders import get_positions, place_market_order
+        from app.services.journal import close_journal_for_trade
 
         positions = await get_positions(token)
+        open_live = []
         for p in positions:
             try:
                 qty = int(float(p.get("quantity") or p.get("net_quantity") or 0))
@@ -453,8 +495,34 @@ async def auto_squareoff() -> None:
                 continue
             if qty == 0:
                 continue
-
             symbol = (p.get("trading_symbol") or p.get("tradingsymbol") or "").upper()
+            open_live.append((symbol, qty, p))
+
+        if not open_live:
+            logger.info("auto_squareoff: no open live positions")
+            return
+
+        summary = ", ".join(f"{s}×{q}" for s, q, _ in open_live)
+
+        if not cfg.live_auto_squareoff:
+            await send_alert(
+                "Live positions still open at 15:15 — confirm close manually",
+                f"HITL mode (LIVE_AUTO_SQUAREOFF=false). Open: {summary}. "
+                "Close in Upstox or enable LIVE_AUTO_SQUAREOFF for force-close.",
+                level="CRITICAL",
+            )
+            logger.warning(
+                "auto_squareoff: notify-only — open live positions: %s", summary
+            )
+            return
+
+        await send_alert(
+            "Live auto square-off starting",
+            f"LIVE_AUTO_SQUAREOFF=true — force-closing: {summary}",
+            level="WARNING",
+        )
+
+        for symbol, qty, p in open_live:
             instrument_key = p.get("instrument_token") or p.get("instrument_key")
             if not instrument_key and symbol:
                 instrument_key = get_instrument_key(symbol)
@@ -468,7 +536,6 @@ async def auto_squareoff() -> None:
                 order_id = await place_market_order(
                     token, instrument_key, side, abs_qty, product="I"
                 )
-                # Close matching open Trade rows
                 async with async_session() as db:
                     result = await db.execute(
                         select(Trade).where(
@@ -486,12 +553,28 @@ async def auto_squareoff() -> None:
                         trade.status = "closed"
                         trade.closed_at = datetime.now(timezone.utc)
                         trade.notes = (trade.notes or "") + f" | EOD_SQUAREOFF order={order_id}"
+                        await close_journal_for_trade(
+                            db, trade, exit_price=ltp, pnl=trade.pnl or 0.0
+                        )
                     await db.commit()
-                logger.info("auto_squareoff: closed live %s qty=%d via %s", symbol, abs_qty, order_id)
+                logger.info(
+                    "auto_squareoff: closed live %s qty=%d via %s", symbol, abs_qty, order_id
+                )
             except Exception:
                 logger.exception("auto_squareoff: failed to close %s", symbol)
+                await send_alert(
+                    f"Live square-off failed for {symbol}",
+                    "Check Upstox positions manually.",
+                    level="ERROR",
+                )
     except Exception:
         logger.exception("auto_squareoff: live square-off failed")
+        from app.services.alerts import send_alert as _alert
+        await _alert(
+            "Live EOD square-off failed",
+            "Unhandled error while handling live positions.",
+            level="CRITICAL",
+        )
 
 
 # ── 15:45 — Intraday candle refresh ──────────────────────────────────────────

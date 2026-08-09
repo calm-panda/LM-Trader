@@ -73,6 +73,7 @@ flowchart TD
 - Two buttons only: **Confirm** / **Reject**. No auto-timeout auto-execute.
 - On Confirm → order placed via Upstox order API, immediately logged to the trade journal with the AI's original reasoning attached (this becomes your audit trail and, later, your backtesting dataset).
 - On Reject or no action within the signal's validity window → logged as skipped, also useful for later analysis ("how often do I override the AI, and was I right to?").
+- **Live EOD:** default is notify-only at 15:15 (`LIVE_AUTO_SQUAREOFF=false`) so HITL is preserved; set `LIVE_AUTO_SQUAREOFF=true` only if you explicitly want force-close of open MIS without Confirm. Paper positions always auto-square.
 
 ### 4.5 Portfolio Analytics Module
 - Pulls live positions/holdings from Upstox.
