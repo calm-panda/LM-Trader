@@ -47,6 +47,7 @@ async def init_db() -> None:
         signal,
         strategy,
         trade,
+        trade_journal,
     )
 
     async with engine.begin() as conn:

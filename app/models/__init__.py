@@ -5,6 +5,7 @@ from app.models.portfolio import PortfolioSnapshot
 from app.models.signal import Signal
 from app.models.strategy import Strategy
 from app.models.trade import Trade
+from app.models.trade_journal import TradeJournal
 
 __all__ = [
     "AuthToken",
@@ -14,4 +15,5 @@ __all__ = [
     "Signal",
     "Strategy",
     "Trade",
+    "TradeJournal",
 ]
