@@ -7,9 +7,8 @@ import logging
 import math
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,11 +18,12 @@ from app.models.auth_token import AuthToken
 from app.models.portfolio import PortfolioSnapshot
 from app.models.signal import Signal
 from app.models.trade import Trade
+from app.models.trade_journal import TradeJournal
 from app.services.upstox.auth import _as_utc, _utc_now
+from app.templating import templates, ui_context
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
 
 
 def _parse_triggered(raw: str | None) -> list[str]:
@@ -92,13 +92,57 @@ async def signals_page(request: Request, db: AsyncSession = Depends(get_db)):
     return templates.TemplateResponse(
         request,
         "signals.html",
-        {
-            "title": "AI Signals",
-            "pending": pending,
-            "history": history,
-            "live_trading_enabled": settings.live_trading_enabled,
-            "signal_validity_minutes": settings.signal_validity_minutes,
-        },
+        ui_context(
+            title="Signals",
+            pending=pending,
+            history=history,
+            signal_validity_minutes=settings.signal_validity_minutes,
+        ),
+    )
+
+
+@router.get("/signals/{signal_id}", response_class=HTMLResponse, name="signal_detail")
+async def signal_detail(signal_id: int, request: Request, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Signal).where(Signal.id == signal_id))
+    sig = result.scalar_one_or_none()
+    if not sig:
+        raise HTTPException(status_code=404, detail="Signal not found")
+
+    trade = None
+    if sig.status == "confirmed":
+        t_result = await db.execute(
+            select(Trade).where(Trade.signal_id == sig.id).order_by(Trade.opened_at.desc()).limit(1)
+        )
+        trade = t_result.scalar_one_or_none()
+
+    journal = None
+    j_result = await db.execute(
+        select(TradeJournal)
+        .where(TradeJournal.signal_id == sig.id)
+        .order_by(TradeJournal.created_at.desc())
+        .limit(1)
+    )
+    journal = j_result.scalar_one_or_none()
+
+    snapshot = {}
+    snapshot_json = "{}"
+    if sig.indicators_snapshot:
+        try:
+            snapshot = json.loads(sig.indicators_snapshot)
+            snapshot_json = json.dumps(snapshot, indent=2)
+        except json.JSONDecodeError:
+            snapshot_json = sig.indicators_snapshot
+
+    return templates.TemplateResponse(
+        request,
+        "signal_detail.html",
+        ui_context(
+            title=f"Signal · {sig.symbol}",
+            sig=_signal_ctx(sig),
+            trade=trade,
+            journal=journal,
+            snapshot_json=snapshot_json,
+        ),
     )
 
 
@@ -107,6 +151,7 @@ async def reject_signal(
     signal_id: int,
     request: Request,
     db: AsyncSession = Depends(get_db),
+    reason: str = Query(default=""),
 ):
     result = await db.execute(select(Signal).where(Signal.id == signal_id))
     sig = result.scalar_one_or_none()
@@ -115,19 +160,21 @@ async def reject_signal(
     if sig.status != "pending":
         raise HTTPException(status_code=409, detail=f"Signal already {sig.status}")
 
+    notes = f"user rejected: {reason}" if reason.strip() else "user rejected"
     sig.status = "rejected"
+    from app.services.journal import record_journal
+    await record_journal(action="rejected", signal=sig, notes=notes, db=db)
     await db.commit()
     await db.refresh(sig)
 
     return templates.TemplateResponse(
         request,
         "partials/signal_card.html",
-        {
-            "sig": _signal_ctx(sig),
-            "live_trading_enabled": get_settings().live_trading_enabled,
-            "done": True,
-            "message": "Rejected — logged to journal.",
-        },
+        ui_context(
+            sig=_signal_ctx(sig),
+            done=True,
+            message=f"Rejected — logged to journal{' (' + reason + ')' if reason else ''}.",
+        ),
     )
 
 
@@ -159,6 +206,13 @@ async def confirm_signal(
         raise HTTPException(status_code=409, detail=f"Signal already {sig.status}")
     if expires <= now:
         sig.status = "expired"
+        from app.services.journal import record_journal
+        await record_journal(
+            action="expired",
+            signal=sig,
+            notes="expired at confirm attempt",
+            db=db,
+        )
         await db.commit()
         raise HTTPException(status_code=409, detail="Signal has expired")
 
@@ -170,6 +224,12 @@ async def confirm_signal(
     )
     open_count = open_count_result.scalar_one() or 0
     if open_count >= settings.max_open_positions:
+        from app.services.alerts import send_alert
+        await send_alert(
+            "Confirm blocked — max open positions",
+            f"{sig.symbol}: {open_count} >= {settings.max_open_positions}",
+            level="WARNING",
+        )
         raise HTTPException(
             status_code=400,
             detail=f"Max open positions ({settings.max_open_positions}) reached",
@@ -207,6 +267,13 @@ async def confirm_signal(
         if day_snap and day_snap.total_value > 0:
             day_pnl_pct = (current_total - day_snap.total_value) / day_snap.total_value * 100
             if day_pnl_pct < -settings.daily_loss_limit_pct:
+                from app.services.alerts import send_alert
+                await send_alert(
+                    "Confirm blocked — daily loss limit",
+                    f"{sig.symbol}: day P&L {day_pnl_pct:.2f}% breached "
+                    f"-{settings.daily_loss_limit_pct}%",
+                    level="CRITICAL",
+                )
                 raise HTTPException(
                     status_code=400,
                     detail=(
@@ -263,16 +330,27 @@ async def confirm_signal(
     )
     sig.status = "confirmed"
     db.add(trade)
+    await db.flush()
+    from app.services.journal import record_journal
+    await record_journal(
+        action="confirmed",
+        signal=sig,
+        order_id=order_id,
+        trade_id=trade.id,
+        executed_price=sig.entry,
+        quantity=qty,
+        notes="user confirmed live order",
+        db=db,
+    )
     await db.commit()
     await db.refresh(sig)
 
     return templates.TemplateResponse(
         request,
         "partials/signal_card.html",
-        {
-            "sig": _signal_ctx(sig),
-            "live_trading_enabled": True,
-            "done": True,
-            "message": f"Confirmed — live order {order_id} placed (qty={qty}).",
-        },
+        ui_context(
+            sig=_signal_ctx(sig),
+            done=True,
+            message=f"Confirmed — live order {order_id} placed (qty={qty}).",
+        ),
     )

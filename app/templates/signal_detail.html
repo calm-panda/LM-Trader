@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block page_title %}Signal · {{ sig.symbol }}{% endblock %}
+
+{% block content %}
+<p><a href="/signals">← Signals</a></p>
+
+{% with done=(sig.status != 'pending'), message='' %}
+{% include "partials/signal_card.html" %}
+{% endwith %}
+
+<section class="widget" style="margin-top:1rem;">
+  <header>Indicator snapshot</header>
+  {% if snapshot_json and snapshot_json != '{}' %}
+  <pre style="font-size:0.78rem;overflow:auto;max-height:280px;">{{ snapshot_json }}</pre>
+  {% else %}
+  <div class="state-box">No snapshot stored for this signal.</div>
+  {% endif %}
+</section>
+
+<section class="widget" style="margin-top:1rem;">
+  <header>Outcome</header>
+  {% if journal %}
+  <p>Journal: <span class="badge">{{ journal.action }}</span>
+    {% if journal.outcome_pnl is not none %} · P&amp;L ₹{{ "%.2f"|format(journal.outcome_pnl) }}{% endif %}
+    {% if journal.achieved_rr is not none %} · Achieved R:R {{ "%.2f"|format(journal.achieved_rr) }}{% endif %}
+  </p>
+  {% endif %}
+  {% if trade %}
+  <p>Trade #{{ trade.id }} · {{ trade.status }} · qty {{ trade.quantity }} @ ₹{{ "%.2f"|format(trade.entry_price) }}
+    {% if trade.exit_price %} → ₹{{ "%.2f"|format(trade.exit_price) }}{% endif %}
+    {% if trade.pnl is not none %} · P&amp;L ₹{{ "%.2f"|format(trade.pnl) }}{% endif %}
+  </p>
+  {% elif sig.status == 'confirmed' %}
+  <div class="state-box">Confirmed but no Trade row found.</div>
+  {% else %}
+  <div class="state-box">No execution outcome ({{ sig.status }}).</div>
+  {% endif %}
+</section>
+{% endblock %}

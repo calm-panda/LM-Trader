@@ -1,4 +1,5 @@
-<article id="signal-card-{{ sig.id }}" class="signal-card {% if sig.direction == 'BUY' %}buy{% else %}sell{% endif %}">
+<article id="signal-card-{{ sig.id }}" class="signal-card {% if sig.direction == 'BUY' %}buy{% else %}sell{% endif %}"
+         data-expires="{{ sig.expires_at }}">
   <header>
     <strong>{{ sig.symbol }}</strong>
     <span class="badge {% if sig.direction == 'BUY' %}success{% else %}danger{% endif %}">
@@ -11,11 +12,11 @@
     {% endif %}
   </header>
 
-  <div class="grid signal-levels">
-    <div><small>Entry</small><br><strong>₹{{ "%.2f"|format(sig.entry) }}</strong></div>
-    <div><small>Stop</small><br><strong>₹{{ "%.2f"|format(sig.stop_loss) }}</strong></div>
-    <div><small>Target</small><br><strong>₹{{ "%.2f"|format(sig.target) }}</strong></div>
-    <div><small>R:R</small><br><strong>{{ "%.2f"|format(sig.risk_reward_ratio) }}</strong></div>
+  <div class="signal-levels">
+    <div><small class="muted">Entry</small><br><strong>₹{{ "%.2f"|format(sig.entry) }}</strong></div>
+    <div><small class="muted">Stop</small><br><strong>₹{{ "%.2f"|format(sig.stop_loss) }}</strong></div>
+    <div><small class="muted">Target</small><br><strong>₹{{ "%.2f"|format(sig.target) }}</strong></div>
+    <div><small class="muted">R:R</small><br><strong>{{ "%.2f"|format(sig.risk_reward_ratio) }}</strong></div>
   </div>
 
   {% if sig.indicators_triggered %}
@@ -28,21 +29,27 @@
 
   <p>{{ sig.reasoning }}</p>
   <p><small><strong>Invalidation:</strong> {{ sig.invalidation }}</small></p>
-  <p><small>Expires {{ sig.expires_at }} · {{ sig.model_used }}</small></p>
+  <p class="expiry-countdown" data-expires="{{ sig.expires_at }}">Expires {{ sig.expires_at }} · {{ sig.model_used }}</p>
 
   {% if done|default(false) %}
   <p class="badge success">{{ message|default('') }}</p>
   {% elif sig.status == 'pending' %}
   <div class="signal-actions">
+    {% if live_trading_enabled %}
     <button
       class="contrast"
       hx-post="/signals/{{ sig.id }}/confirm"
       hx-target="#signal-card-{{ sig.id }}"
       hx-swap="outerHTML"
-      {% if not live_trading_enabled %}disabled title="Enable LIVE_TRADING_ENABLED in .env"{% endif %}
+      hx-confirm="LIVE order: Place {{ sig.direction }} {{ sig.symbol }} at ~₹{{ '%.2f'|format(sig.entry) }} (sized by risk %). Confirm with Upstox?"
     >
       Confirm (live)
     </button>
+    {% else %}
+    <button class="contrast" disabled title="Set LIVE_TRADING_ENABLED=true and restart to place live orders">
+      Confirm (live off)
+    </button>
+    {% endif %}
     <button
       class="outline"
       hx-post="/signals/{{ sig.id }}/reject"
@@ -51,6 +58,21 @@
     >
       Reject
     </button>
+  </div>
+  <div class="reject-reasons">
+    <small class="muted">Quick reject:</small>
+    <button class="outline"
+      hx-post="/signals/{{ sig.id }}/reject?reason=wrong+setup"
+      hx-target="#signal-card-{{ sig.id }}" hx-swap="outerHTML">Wrong setup</button>
+    <button class="outline"
+      hx-post="/signals/{{ sig.id }}/reject?reason=bad+timing"
+      hx-target="#signal-card-{{ sig.id }}" hx-swap="outerHTML">Bad timing</button>
+    <button class="outline"
+      hx-post="/signals/{{ sig.id }}/reject?reason=overridden+by+news"
+      hx-target="#signal-card-{{ sig.id }}" hx-swap="outerHTML">News</button>
+    <button class="outline"
+      hx-post="/signals/{{ sig.id }}/reject?reason=other"
+      hx-target="#signal-card-{{ sig.id }}" hx-swap="outerHTML">Other</button>
   </div>
   {% endif %}
 </article>

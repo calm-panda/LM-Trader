@@ -1,65 +1,107 @@
 {% extends "base.html" %}
 
-{% block content %}
-<h1>AI Signals</h1>
+{% block page_title %}Signals{% endblock %}
 
-<p>
-  DeepSeek recommendations require your <strong>Confirm</strong> before any live order.
-  Automated paper strategies are separate and unaffected.
-  {% if not live_trading_enabled %}
-  <span class="badge warning">Live trading disabled</span>
+{% block content %}
+<p class="muted">
+  AI recommendations require Confirm before any live order.
+  Paper strategies auto-fill separately.
+  {% if live_trading_enabled %}
+  <span class="mode-badge live">LIVE</span>
   {% else %}
-  <span class="badge danger">Live trading ENABLED</span>
+  <span class="mode-badge paper">PAPER</span>
   {% endif %}
-  <small>Signals expire after {{ signal_validity_minutes }} minutes.</small>
+  · expire after {{ signal_validity_minutes }} min
 </p>
 
-<h2>Pending</h2>
-<div id="pending-signals" class="signal-grid">
-  {% if pending %}
-    {% for sig in pending %}
-      {% with done=False, message='' %}
-      {% include "partials/signal_card.html" %}
-      {% endwith %}
-    {% endfor %}
-  {% else %}
-    <p id="no-pending"><em>No pending signals. The scanner runs every few minutes during market hours.</em></p>
-  {% endif %}
+<nav class="tabs" role="tablist">
+  <button type="button" class="active" data-tab="pending">Pending ({{ pending|length }})</button>
+  <button type="button" data-tab="history">History</button>
+</nav>
+
+<div id="tab-pending" class="tab-panel active">
+  <div id="pending-signals" class="signal-grid">
+    {% if pending %}
+      {% for sig in pending %}
+        {% with done=False, message='' %}
+        {% include "partials/signal_card.html" %}
+        {% endwith %}
+      {% endfor %}
+    {% else %}
+      <div class="state-box" id="no-pending">No pending signals. The scanner runs every few minutes during market hours.</div>
+    {% endif %}
+  </div>
 </div>
 
-<h2>Recent History</h2>
-{% if history %}
-<table>
-  <thead>
-    <tr>
-      <th>When</th>
-      <th>Symbol</th>
-      <th>Dir</th>
-      <th>Entry</th>
-      <th>Conf</th>
-      <th>Status</th>
-      <th>Reasoning</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for sig in history %}
-    <tr>
-      <td><small>{{ sig.generated_at }}</small></td>
-      <td><strong>{{ sig.symbol }}</strong></td>
-      <td>
-        <span class="badge {% if sig.direction == 'BUY' %}success{% else %}danger{% endif %}">
-          {{ sig.direction }}
-        </span>
-      </td>
-      <td>₹{{ "%.2f"|format(sig.entry) }}</td>
-      <td>{{ "%.0f"|format(sig.confidence * 100) }}%</td>
-      <td><span class="badge">{{ sig.status }}</span></td>
-      <td><small>{{ sig.reasoning[:120] }}{% if sig.reasoning|length > 120 %}…{% endif %}</small></td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p><em>No signal history yet.</em></p>
-{% endif %}
+<div id="tab-history" class="tab-panel">
+  {% if history %}
+  <table>
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>Symbol</th>
+        <th>Dir</th>
+        <th>Entry</th>
+        <th>Conf</th>
+        <th>Status</th>
+        <th>Reasoning</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sig in history %}
+      <tr>
+        <td><small>{{ sig.generated_at }}</small></td>
+        <td><strong><a href="/signals/{{ sig.id }}">{{ sig.symbol }}</a></strong></td>
+        <td>
+          <span class="badge {% if sig.direction == 'BUY' %}success{% else %}danger{% endif %}">
+            {{ sig.direction }}
+          </span>
+        </td>
+        <td>₹{{ "%.2f"|format(sig.entry) }}</td>
+        <td>{{ "%.0f"|format(sig.confidence * 100) }}%</td>
+        <td><span class="badge">{{ sig.status }}</span></td>
+        <td><small>{{ sig.reasoning[:120] }}{% if sig.reasoning|length > 120 %}…{% endif %}</small></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="state-box">No signal history yet.</div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  document.querySelectorAll('.tabs [data-tab]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.tabs [data-tab]').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      var panel = document.getElementById('tab-' + btn.dataset.tab);
+      if (panel) panel.classList.add('active');
+    });
+  });
+
+  function tickExpiry() {
+    var now = Date.now();
+    document.querySelectorAll('.expiry-countdown[data-expires]').forEach(function (el) {
+      var exp = Date.parse(el.getAttribute('data-expires'));
+      if (!exp) return;
+      var secs = Math.floor((exp - now) / 1000);
+      if (secs <= 0) {
+        el.textContent = 'Expired';
+        el.classList.add('urgent');
+        return;
+      }
+      var m = Math.floor(secs / 60), s = secs % 60;
+      el.textContent = 'Expires in ' + m + 'm ' + s + 's';
+      if (secs < 120) el.classList.add('urgent');
+    });
+  }
+  tickExpiry();
+  setInterval(tickExpiry, 1000);
+})();
+</script>
 {% endblock %}
