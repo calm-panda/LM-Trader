@@ -1,4 +1,4 @@
-"""Portfolio page — paper snapshot, live Upstox positions/holdings, trade journal."""
+"""Portfolio page — Overview / Positions / Journal / Risk tabs."""
 
 from __future__ import annotations
 
@@ -6,22 +6,21 @@ import logging
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import get_db
 from app.models.auth_token import AuthToken
-from app.models.signal import Signal
-from app.models.trade import Trade
+from app.models.trade_journal import TradeJournal
+from app.services.journal import compute_analytics
 from app.services.paper_engine import paper_engine
 from app.services.tick_store import tick_store
 from app.services.upstox.auth import _as_utc, _utc_now
+from app.templating import templates, ui_context
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
 
 
 @router.get("/portfolio", response_class=HTMLResponse, name="portfolio")
@@ -37,6 +36,7 @@ async def portfolio_page(request: Request, db: AsyncSession = Depends(get_db)):
         "positions": [],
         "holdings": [],
         "error": None,
+        "auto_squareoff": settings.live_auto_squareoff,
     }
 
     if settings.live_trading_enabled:
@@ -57,45 +57,43 @@ async def portfolio_page(request: Request, db: AsyncSession = Depends(get_db)):
                 logger.exception("portfolio: live fetch failed")
                 live["error"] = str(exc)
 
-    # Trade journal with optional signal reasoning
-    trades_result = await db.execute(
-        select(Trade).order_by(Trade.opened_at.desc()).limit(50)
-    )
-    trades = list(trades_result.scalars())
-    signal_ids = [t.signal_id for t in trades if t.signal_id]
-    signal_map: dict[int, Signal] = {}
-    if signal_ids:
-        sig_result = await db.execute(select(Signal).where(Signal.id.in_(signal_ids)))
-        signal_map = {s.id: s for s in sig_result.scalars()}
+    analytics = await compute_analytics(db)
 
-    journal = []
-    for t in trades:
-        sig = signal_map.get(t.signal_id) if t.signal_id else None
-        journal.append({
-            "id": t.id,
-            "mode": t.mode,
-            "symbol": t.symbol,
-            "side": t.side,
-            "quantity": t.quantity,
-            "entry_price": t.entry_price,
-            "exit_price": t.exit_price,
-            "pnl": t.pnl,
-            "status": t.status,
-            "upstox_order_id": t.upstox_order_id,
-            "opened_at": t.opened_at,
-            "closed_at": t.closed_at,
-            "notes": t.notes,
-            "signal_confidence": sig.confidence if sig else None,
-            "signal_reasoning": sig.reasoning if sig else None,
-        })
+    journal_result = await db.execute(
+        select(TradeJournal).order_by(TradeJournal.created_at.desc()).limit(50)
+    )
+    journal = [
+        {
+            "id": j.id,
+            "action": j.action,
+            "symbol": j.symbol,
+            "direction": j.direction,
+            "executed_price": j.executed_price,
+            "quantity": j.quantity,
+            "planned_rr": j.planned_rr,
+            "achieved_rr": j.achieved_rr,
+            "outcome_pnl": j.outcome_pnl,
+            "order_id": j.order_id,
+            "notes": j.notes,
+            "created_at": j.created_at,
+            "closed_at": j.closed_at,
+        }
+        for j in journal_result.scalars()
+    ]
+
+    tab = request.query_params.get("tab", "overview")
+    if tab not in ("overview", "positions", "journal", "risk"):
+        tab = "overview"
 
     return templates.TemplateResponse(
         request,
         "portfolio.html",
-        {
-            "title": "Portfolio",
-            "paper": paper_snap,
-            "live": live,
-            "journal": journal,
-        },
+        ui_context(
+            title="Portfolio",
+            paper=paper_snap,
+            live=live,
+            analytics=analytics,
+            journal=journal,
+            active_tab=tab,
+        ),
     )

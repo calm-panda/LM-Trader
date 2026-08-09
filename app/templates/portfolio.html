@@ -1,133 +1,158 @@
 {% extends "base.html" %}
 
-{% block content %}
-<h1>Portfolio</h1>
+{% block page_title %}Portfolio{% endblock %}
 
-<div class="grid">
-  <article>
-    <header>Paper Portfolio</header>
+{% block content %}
+<nav class="tabs" role="tablist">
+  <a href="/portfolio?tab=overview" class="{% if active_tab == 'overview' %}active{% endif %}">Overview</a>
+  <a href="/portfolio?tab=positions" class="{% if active_tab == 'positions' %}active{% endif %}">Positions</a>
+  <a href="/portfolio?tab=journal" class="{% if active_tab == 'journal' %}active{% endif %}">Trade Journal</a>
+  <a href="/portfolio?tab=risk" class="{% if active_tab == 'risk' %}active{% endif %}">Risk Metrics</a>
+</nav>
+
+{% if active_tab == 'overview' %}
+<div class="widget-grid">
+  <article class="widget">
+    <header>Paper</header>
     <p>Cash: <strong>₹{{ "%.2f"|format(paper.cash) }}</strong></p>
-    <p>Total Value: <strong>₹{{ "%.2f"|format(paper.total_value) }}</strong></p>
-    <p>Day P&amp;L: <strong>₹{{ "%.2f"|format(paper.day_pnl) }}</strong></p>
-    <p>Realised: ₹{{ "%.2f"|format(paper.realised_pnl) }} · Unrealised: ₹{{ "%.2f"|format(paper.unrealised_pnl) }}</p>
-    <p>Open positions: {{ paper.open_positions }}</p>
-    {% if paper.positions %}
+    <p>Total: <strong>₹{{ "%.2f"|format(paper.total_value) }}</strong></p>
+    <p>Day P&amp;L: <strong class="{{ 'up' if paper.day_pnl >= 0 else 'down' }}">₹{{ "%.2f"|format(paper.day_pnl) }}</strong></p>
+    <p class="muted">Realised ₹{{ "%.2f"|format(paper.realised_pnl) }} · Unrealised ₹{{ "%.2f"|format(paper.unrealised_pnl) }}</p>
+  </article>
+  <article class="widget">
+    <header>Live</header>
+    {% if not live.enabled %}
+      <div class="state-box">Live trading disabled. Set <code>LIVE_TRADING_ENABLED=true</code> to sync Upstox.</div>
+    {% elif live.error %}
+      <div class="state-box error">{{ live.error }}</div>
+    {% else %}
+      <p>Available cash: <strong>₹{{ "%.2f"|format(live.funds or 0) }}</strong></p>
+      <p class="muted">Open live positions: {{ live.positions|length }} · Holdings: {{ live.holdings|length }}</p>
+      <p><small>EOD:
+        {% if live.auto_squareoff %}<span class="badge danger">auto force-close</span>
+        {% else %}<span class="badge">notify-only HITL</span>{% endif %}
+      </small></p>
+    {% endif %}
+  </article>
+</div>
+{% endif %}
+
+{% if active_tab == 'positions' %}
+<section class="widget" style="margin-bottom:1rem;">
+  <header>Paper positions</header>
+  {% if paper.positions %}
+  <table>
+    <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>LTP</th><th>P&amp;L</th></tr></thead>
+    <tbody>
+      {% for p in paper.positions %}
+      <tr>
+        <td>{{ p.symbol }}</td>
+        <td>{{ p.qty }}</td>
+        <td>₹{{ "%.2f"|format(p.avg_price) }}</td>
+        <td>₹{{ "%.2f"|format(p.ltp) }}</td>
+        <td class="{{ 'up' if p.pnl >= 0 else 'down' }}">₹{{ "%.2f"|format(p.pnl) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="state-box">No open paper positions.</div>
+  {% endif %}
+</section>
+
+<section class="widget">
+  <header>Live positions / holdings</header>
+  {% if not live.enabled %}
+  <div class="state-box">Live trading disabled.</div>
+  {% elif live.error %}
+  <div class="state-box error">{{ live.error }}</div>
+  {% else %}
+    {% if live.positions %}
+    <h3>Positions</h3>
     <table>
-      <thead>
-        <tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>LTP</th><th>P&amp;L</th></tr>
-      </thead>
+      <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>LTP</th><th>P&amp;L</th></tr></thead>
       <tbody>
-        {% for p in paper.positions %}
+        {% for p in live.positions %}
         <tr>
-          <td>{{ p.symbol }}</td>
-          <td>{{ p.qty }}</td>
-          <td>₹{{ "%.2f"|format(p.avg_price) }}</td>
-          <td>₹{{ "%.2f"|format(p.ltp) }}</td>
-          <td>₹{{ "%.2f"|format(p.pnl) }}</td>
+          <td>{{ p.trading_symbol or p.tradingsymbol or p.instrument_token }}</td>
+          <td>{{ p.quantity or p.net_quantity }}</td>
+          <td>₹{{ p.average_price or p.buy_price or '—' }}</td>
+          <td>₹{{ p.last_price or p.ltp or '—' }}</td>
+          <td>₹{{ p.pnl or p.unrealised or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="state-box">No open live positions.</div>
+    {% endif %}
+    {% if live.holdings %}
+    <h3>Holdings</h3>
+    <table>
+      <thead><tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>LTP</th><th>P&amp;L</th></tr></thead>
+      <tbody>
+        {% for h in live.holdings %}
+        <tr>
+          <td>{{ h.trading_symbol or h.tradingsymbol or h.isin }}</td>
+          <td>{{ h.quantity }}</td>
+          <td>₹{{ h.average_price or '—' }}</td>
+          <td>₹{{ h.last_price or h.ltp or '—' }}</td>
+          <td>₹{{ h.pnl or '—' }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
     {% endif %}
-  </article>
+  {% endif %}
+</section>
+{% endif %}
 
-  <article>
-    <header>Live Portfolio</header>
-    {% if not live.enabled %}
-      <p><em>Live trading disabled. Set <code>LIVE_TRADING_ENABLED=true</code> in <code>.env</code> to sync Upstox holdings.</em></p>
-    {% elif live.error %}
-      <p class="badge warning">{{ live.error }}</p>
-    {% else %}
-      <p>Available cash: <strong>₹{{ "%.2f"|format(live.funds or 0) }}</strong></p>
-
-      <h3>Positions</h3>
-      {% if live.positions %}
-      <table>
-        <thead>
-          <tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>LTP</th><th>P&amp;L</th></tr>
-        </thead>
-        <tbody>
-          {% for p in live.positions %}
-          <tr>
-            <td>{{ p.trading_symbol or p.tradingsymbol or p.instrument_token }}</td>
-            <td>{{ p.quantity or p.net_quantity }}</td>
-            <td>₹{{ p.average_price or p.buy_price or '—' }}</td>
-            <td>₹{{ p.last_price or p.ltp or '—' }}</td>
-            <td>₹{{ p.pnl or p.unrealised or '—' }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <p><em>No open live positions.</em></p>
-      {% endif %}
-
-      <h3>Holdings</h3>
-      {% if live.holdings %}
-      <table>
-        <thead>
-          <tr><th>Symbol</th><th>Qty</th><th>Avg</th><th>LTP</th><th>P&amp;L</th></tr>
-        </thead>
-        <tbody>
-          {% for h in live.holdings %}
-          <tr>
-            <td>{{ h.trading_symbol or h.tradingsymbol or h.isin }}</td>
-            <td>{{ h.quantity }}</td>
-            <td>₹{{ h.average_price or '—' }}</td>
-            <td>₹{{ h.last_price or h.ltp or '—' }}</td>
-            <td>₹{{ h.pnl or '—' }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <p><em>No holdings.</em></p>
-      {% endif %}
-    {% endif %}
-  </article>
-</div>
-
-<h2>Trade Journal</h2>
+{% if active_tab == 'journal' %}
 {% if journal %}
 <table>
   <thead>
     <tr>
-      <th>Opened</th>
-      <th>Mode</th>
-      <th>Symbol</th>
-      <th>Side</th>
-      <th>Qty</th>
-      <th>Entry</th>
-      <th>Exit</th>
-      <th>P&amp;L</th>
-      <th>Status</th>
-      <th>AI</th>
+      <th>When</th><th>Action</th><th>Symbol</th><th>Dir</th><th>Qty</th>
+      <th>Price</th><th>Planned R:R</th><th>Achieved R:R</th><th>Outcome P&amp;L</th><th>Notes</th>
     </tr>
   </thead>
   <tbody>
     {% for t in journal %}
     <tr>
-      <td><small>{{ t.opened_at }}</small></td>
-      <td><span class="badge">{{ t.mode }}</span></td>
-      <td><strong>{{ t.symbol }}</strong></td>
-      <td>{{ t.side }}</td>
-      <td>{{ t.quantity }}</td>
-      <td>₹{{ "%.2f"|format(t.entry_price) }}</td>
-      <td>{% if t.exit_price %}₹{{ "%.2f"|format(t.exit_price) }}{% else %}—{% endif %}</td>
-      <td>{% if t.pnl is not none %}₹{{ "%.2f"|format(t.pnl) }}{% else %}—{% endif %}</td>
-      <td>{{ t.status }}</td>
-      <td>
-        {% if t.signal_confidence is not none %}
-        <small>{{ "%.0f"|format(t.signal_confidence * 100) }}% — {{ (t.signal_reasoning or '')[:80] }}{% if t.signal_reasoning and t.signal_reasoning|length > 80 %}…{% endif %}</small>
-        {% else %}
-        —
-        {% endif %}
-      </td>
+      <td><small>{{ t.created_at }}</small></td>
+      <td><span class="badge {% if t.action == 'confirmed' %}success{% elif t.action == 'rejected' %}warning{% endif %}">{{ t.action }}</span></td>
+      <td><strong>{{ t.symbol or '—' }}</strong></td>
+      <td>{{ t.direction or '—' }}</td>
+      <td>{% if t.quantity is not none %}{{ t.quantity }}{% else %}—{% endif %}</td>
+      <td>{% if t.executed_price is not none %}₹{{ "%.2f"|format(t.executed_price) }}{% else %}—{% endif %}</td>
+      <td>{% if t.planned_rr is not none %}{{ "%.2f"|format(t.planned_rr) }}{% else %}—{% endif %}</td>
+      <td>{% if t.achieved_rr is not none %}{{ "%.2f"|format(t.achieved_rr) }}{% else %}—{% endif %}</td>
+      <td>{% if t.outcome_pnl is not none %}₹{{ "%.2f"|format(t.outcome_pnl) }}{% else %}—{% endif %}</td>
+      <td><small>{{ (t.notes or '')[:80] }}</small></td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
 {% else %}
-<p><em>No trades yet.</em></p>
+<div class="state-box">No journal entries yet. Confirm/Reject/Expire on AI signals will appear here.</div>
+{% endif %}
+{% endif %}
+
+{% if active_tab == 'risk' %}
+<div class="widget-grid">
+  <article class="widget">
+    <p>Win rate: <strong>{% if analytics.win_rate_pct is not none %}{{ analytics.win_rate_pct }}%{% else %}—{% endif %}</strong>
+      <small class="muted">({{ analytics.wins }}/{{ analytics.closed_trades }} closed)</small></p>
+    <p>Avg planned R:R: <strong>{% if analytics.avg_planned_rr is not none %}{{ analytics.avg_planned_rr }}{% else %}—{% endif %}</strong></p>
+    <p>Avg achieved R:R: <strong>{% if analytics.avg_achieved_rr is not none %}{{ analytics.avg_achieved_rr }}{% else %}—{% endif %}</strong></p>
+    <p>Total outcome P&amp;L: <strong>{% if analytics.total_outcome_pnl is not none %}₹{{ "%.2f"|format(analytics.total_outcome_pnl) }}{% else %}—{% endif %}</strong></p>
+  </article>
+  <article class="widget">
+    <p>Confirmed {{ analytics.confirmed }} · Rejected {{ analytics.rejected }} · Expired {{ analytics.expired }}</p>
+    <p>Override rate: <strong>{% if analytics.override_rate_pct is not none %}{{ analytics.override_rate_pct }}%{% else %}—{% endif %}</strong></p>
+    <p>Live day max drawdown: <strong>{% if analytics.day_max_drawdown_pct is not none %}{{ analytics.day_max_drawdown_pct }}%{% else %}—{% endif %}</strong></p>
+    <p class="muted">Daily loss limit setting: {{ daily_loss_limit_pct }}% · Max positions: {{ max_open_positions }}</p>
+  </article>
+</div>
 {% endif %}
 {% endblock %}

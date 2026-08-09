@@ -1,61 +1,80 @@
 {% extends "base.html" %}
 
-{% block content %}
-<h1>Settings</h1>
+{% block page_title %}Settings{% endblock %}
 
+{% block content %}
 <form>
   <fieldset>
-    <legend>Risk Parameters</legend>
-    <label>
-      Max capital per trade (%)
+    <legend>Risk parameters</legend>
+    <label>Max capital per trade (%)
       <input type="number" value="{{ max_capital_per_trade_pct }}" readonly>
     </label>
-    <label>
-      Max open positions
+    <label>Max open positions
       <input type="number" value="{{ max_open_positions }}" readonly>
     </label>
-    <label>
-      Daily loss limit (%)
+    <label>Daily loss limit (%)
       <input type="number" value="{{ daily_loss_limit_pct }}" readonly>
     </label>
+    <p class="muted"><small>Edit via <code>.env</code> then restart. Auto square-off is 15:15 IST.</small></p>
   </fieldset>
 
   <fieldset>
-    <legend>Paper Trading</legend>
-    <label>
-      Starting capital (₹)
-      <input type="number" value="{{ paper_starting_capital }}" readonly>
-    </label>
+    <legend>API keys (status)</legend>
+    <p>Upstox: {% if upstox_configured %}<span class="badge success">configured</span>{% else %}<span class="badge warning">missing</span>{% endif %}
+      · Redirect: <code>{{ upstox_redirect_uri }}</code></p>
+    <p>DeepSeek: {% if deepseek_configured %}<span class="badge success">configured</span>{% else %}<span class="badge warning">missing</span>{% endif %}</p>
+    <p>NewsAPI: {% if newsapi_configured %}<span class="badge success">configured</span>{% else %}<span class="badge">optional</span>{% endif %}</p>
+    <p>Alert webhook: {% if alert_webhook_configured %}<span class="badge success">configured</span>{% else %}<span class="badge">alerts.log only</span>{% endif %}</p>
+    <p class="muted"><small>Keys are never shown. Update <code>.env</code> and restart to change.</small></p>
   </fieldset>
 
   <fieldset>
-    <legend>AI Signal Gate</legend>
-    <label>
-      Signal validity (minutes)
-      <input type="number" value="{{ signal_validity_minutes }}" readonly>
-    </label>
-    <label>
-      Generation interval (minutes)
-      <input type="number" value="{{ signal_generation_interval_minutes }}" readonly>
-    </label>
-    <label>
-      Confidence threshold (0–1)
-      <input type="number" step="0.01" value="{{ signal_confidence_threshold }}" readonly>
-    </label>
-    <p><small>Override via <code>SIGNAL_VALIDITY_MINUTES</code>, <code>SIGNAL_GENERATION_INTERVAL_MINUTES</code>, <code>SIGNAL_CONFIDENCE_THRESHOLD</code> in <code>.env</code>.</small></p>
-  </fieldset>
-
-  <fieldset>
-    <legend>Live Trading</legend>
+    <legend>Mode status (read-only)</legend>
     <p>
-      Status:
       {% if live_trading_enabled %}
-      <span class="badge danger">ENABLED — requires server restart to disable</span>
+      <span class="mode-badge live">LIVE</span>
+      <span class="badge danger">LIVE_TRADING_ENABLED=true</span>
       {% else %}
-      <span class="badge">Disabled (paper mode + AI confirm-gate for live)</span>
+      <span class="mode-badge paper">PAPER</span>
+      <span class="badge">LIVE_TRADING_ENABLED=false</span>
       {% endif %}
     </p>
-    <p><small>Enable live trading by setting <code>LIVE_TRADING_ENABLED=true</code> in <code>.env</code> and restarting. Live orders still require Confirm on each AI signal.</small></p>
+    <p>
+      Live EOD square-off:
+      {% if live_auto_squareoff %}
+      <span class="badge danger">AUTO force-close</span>
+      {% else %}
+      <span class="badge">notify-only (HITL)</span>
+      {% endif %}
+    </p>
+    <p class="muted"><small>Change mode only by editing <code>.env</code> and restarting the service — intentional friction so live cannot be flipped casually in-app.</small></p>
+  </fieldset>
+
+  <fieldset>
+    <legend>AI signal gate</legend>
+    <label>Signal validity (minutes)
+      <input type="number" value="{{ signal_validity_minutes }}" readonly>
+    </label>
+    <label>Generation interval (minutes)
+      <input type="number" value="{{ signal_generation_interval_minutes }}" readonly>
+    </label>
+    <label>Confidence threshold
+      <input type="number" step="0.01" value="{{ signal_confidence_threshold }}" readonly>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Watchlist</legend>
+    <p>Symbols used for Dashboard quotes, Chart default, and AI signal scan:</p>
+    <p>
+      {% for s in watchlist %}
+      <a href="/chart/{{ s }}" class="badge">{{ s }}</a>
+      {% endfor %}
+    </p>
+    <p class="muted"><small>Edit <code>WATCHLIST=...</code> in <code>.env</code> (comma-separated NSE symbols) and restart.</small></p>
+    <label>Paper starting capital (₹)
+      <input type="number" value="{{ paper_starting_capital }}" readonly>
+    </label>
   </fieldset>
 </form>
 {% endblock %}
