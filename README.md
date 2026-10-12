@@ -49,7 +49,7 @@ Copy `.env.example` to `.env` and set:
 
 ## Build Progress
 
-See `.cursor/base_plan.md` for the original architecture and `.cursor/overhead_plan.md` for the human-in-the-loop Phase 2 design.
+See `base_plan.md` for the original architecture and `overhead_plan.md` for the human-in-the-loop Phase 2 design.
 
 - [x] Project scaffold (FastAPI + Jinja2 + SQLite)
 - [x] Upstox OAuth2 login flow + token storage
